@@ -1,0 +1,67 @@
+// Entry point for the URL shortener.
+// This is where all capabilities are granted and the server starts.
+
+import handler
+import store
+
+struct Config {
+    port: u16,
+    database_url: String,
+    base_url: String,
+}
+
+fn main() can Net, Db, Env, Console, Fail {
+    let config = load_config()?
+    db.connect(config.database_url)?
+    migrate()?
+
+    print("shortener running on port {config.port}")
+    print("base url: {config.base_url}")
+
+    net.serve(config.port, |req| {
+        catch handler.route(req) {
+            Ok(response) => response,
+            Err(e) => error_response(e),
+        }
+    })
+}
+
+fn load_config() -> Config can Env, Fail {
+    Config {
+        port: env.get("PORT") |> flat_map(parse_u16) ?? 8080,
+        database_url: env.get("DATABASE_URL") ?? "sqlite://shortener.db",
+        base_url: env.get("BASE_URL") ?? "http://localhost:8080",
+    }
+}
+
+fn migrate() can Db, Fail {
+    db.execute("
+        create table if not exists links (
+            slug        text primary key,
+            url         text not null,
+            created_at  text not null,
+            clicks      integer default 0,
+            last_clicked text,
+            expires_at  text,
+            created_by  text
+        )
+    ")?
+}
+
+// Pure: convert any error into an HTTP response.
+fn error_response(e: ShortenerError) -> HttpResponse {
+    let status = match e {
+        SlugTaken(_)       => 409,
+        SlugNotFound(_)    => 404,
+        InvalidUrl(_)      => 400,
+        SlugTooShort       => 400,
+        SlugTooLong        => 400,
+        SlugInvalidChars(_) => 400,
+        Expired(_)         => 410,
+    }
+    HttpResponse {
+        status,
+        body: json.encode({ error: e.display() }),
+        headers: Map.from([("Content-Type", "application/json")]),
+    }
+}

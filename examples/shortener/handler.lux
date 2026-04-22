@@ -1,0 +1,125 @@
+// HTTP handlers. Thin layer that translates HTTP to domain operations.
+// Each handler declares its full effect set.
+
+import model.{CreateRequest, ShortenerError}
+import store
+import slug.{build_link}
+
+struct HttpRequest {
+    method: String,
+    path: String,
+    body: Option<Bytes>,
+    headers: Map<String, String>,
+}
+
+struct HttpResponse {
+    status: u16,
+    body: String,
+    headers: Map<String, String>,
+}
+
+// Route an incoming request to the right handler.
+pub fn route(req: HttpRequest) -> HttpResponse can Db, Time, Rand, Fail {
+    match (req.method, req.path) {
+        ("POST", "/links")     => create(req),
+        ("GET", "/links")      => list(req),
+        ("GET", path) if path.starts_with("/stats/") => stats(req),
+        ("DELETE", path) if path.starts_with("/links/") => delete(req),
+        ("GET", _)             => redirect(req),
+        _                      => not_found(),
+    }
+}
+
+fn create(req: HttpRequest) -> HttpResponse can Db, Time, Rand, Fail {
+    let body = req.body ?? fail json_error("Missing request body")
+    let create_req = json.decode(body)?
+    let now = time.now()
+    let link = build_link(create_req, now)?
+
+    store.save_link(link)?
+
+    json_response(201, {
+        slug: link.slug,
+        url: link.url.to_string(),
+        short_url: "https://sho.rt/{link.slug}",
+    })
+}
+
+fn redirect(req: HttpRequest) -> HttpResponse can Db, Time, Fail {
+    let slug = req.path.trim_start("/")
+    if slug.is_empty() {
+        return not_found()
+    }
+
+    let now = time.now()
+    let url = catch store.record_click(slug, now) {
+        Ok(url) => url,
+        Err(Expired(_)) => return gone(slug),
+        Err(SlugNotFound(_)) => return not_found(),
+        Err(e) => fail e,
+    }
+
+    HttpResponse {
+        status: 302,
+        body: "",
+        headers: Map.from([("Location", url.to_string())]),
+    }
+}
+
+fn stats(req: HttpRequest) -> HttpResponse can Db, Fail {
+    let slug = req.path.trim_start("/stats/")
+    let stats = store.get_stats(slug)?
+
+    json_response(200, {
+        slug: stats.slug,
+        url: stats.url.to_string(),
+        clicks: stats.clicks,
+        created_at: stats.created_at.to_string(),
+        last_clicked: stats.last_clicked |> map(.to_string),
+        expires_at: stats.expires_at |> map(.to_string),
+    })
+}
+
+fn list(req: HttpRequest) -> HttpResponse can Db, Fail {
+    let limit = req.headers.get("X-Limit")
+        |> flat_map(parse_u32)
+        ?? 20
+
+    let links = store.list_recent(limit)?
+    let items = links |> map(|link| {
+        slug: link.slug,
+        url: link.url.to_string(),
+        clicks: link.clicks,
+        created_at: link.created_at.to_string(),
+    })
+
+    json_response(200, { links: items })
+}
+
+fn delete(req: HttpRequest) -> HttpResponse can Db, Fail {
+    let slug = req.path.trim_start("/links/")
+    store.delete_link(slug)?
+    json_response(204, {})
+}
+
+// --- Response helpers (pure) ---
+
+fn json_response(status: u16, data: impl Encode) -> HttpResponse {
+    HttpResponse {
+        status,
+        body: json.encode(data),
+        headers: Map.from([("Content-Type", "application/json")]),
+    }
+}
+
+fn not_found() -> HttpResponse {
+    json_response(404, { error: "Not found" })
+}
+
+fn gone(slug: String) -> HttpResponse {
+    json_response(410, { error: "Link '{slug}' has expired" })
+}
+
+fn json_error(msg: String) -> ShortenerError {
+    InvalidUrl(msg)  // TODO: need a generic error variant
+}

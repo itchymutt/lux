@@ -1,0 +1,52 @@
+// Data model for the URL shortener.
+// Pure types. No effects. These are the nouns of the system.
+
+struct ShortLink {
+    slug: String,
+    url: Url,
+    created_at: Timestamp,
+    clicks: u64,
+    expires_at: Option<Timestamp>,
+    created_by: Option<String>,
+}
+
+struct CreateRequest {
+    url: Url,
+    custom_slug: Option<String>,
+    expires_in: Option<Duration>,
+    created_by: Option<String>,
+}
+
+struct Stats {
+    slug: String,
+    url: Url,
+    clicks: u64,
+    created_at: Timestamp,
+    last_clicked: Option<Timestamp>,
+    expires_at: Option<Timestamp>,
+}
+
+enum ShortenerError {
+    SlugTaken(String),
+    SlugNotFound(String),
+    InvalidUrl(String),
+    SlugTooShort,
+    SlugTooLong,
+    SlugInvalidChars(String),
+    Expired(String),
+}
+
+// Display for errors. Pure string formatting.
+impl Display for ShortenerError {
+    fn display(let self) -> String {
+        match self {
+            SlugTaken(s)        => "Slug '{s}' is already taken",
+            SlugNotFound(s)     => "No link found for '{s}'",
+            InvalidUrl(u)       => "Invalid URL: {u}",
+            SlugTooShort        => "Slug must be at least 4 characters",
+            SlugTooLong         => "Slug must be at most 32 characters",
+            SlugInvalidChars(s) => "Slug contains invalid characters: {s}",
+            Expired(s)          => "Link '{s}' has expired",
+        }
+    }
+}

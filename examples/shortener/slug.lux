@@ -1,0 +1,78 @@
+// Slug generation and validation.
+// Entirely pure. No effects. This is the kind of module
+// an AI agent should be generating: testable, reproducible, safe.
+
+import model.{ShortenerError, CreateRequest}
+
+let SLUG_CHARS: String = "abcdefghijklmnopqrstuvwxyz0123456789"
+let MIN_SLUG_LEN: u32 = 4
+let MAX_SLUG_LEN: u32 = 32
+let DEFAULT_SLUG_LEN: u32 = 7
+
+// Validate a user-provided custom slug.
+pub fn validate_slug(slug: String) -> Option<ShortenerError> {
+    if slug.len() < MIN_SLUG_LEN {
+        return Some(SlugTooShort)
+    }
+    if slug.len() > MAX_SLUG_LEN {
+        return Some(SlugTooLong)
+    }
+    let invalid = slug
+        |> chars
+        |> filter(|c| !SLUG_CHARS.contains(c))
+        |> collect_string
+    if invalid.len() > 0 {
+        Some(SlugInvalidChars(invalid))
+    } else {
+        None
+    }
+}
+
+// Generate a random slug. Requires Rand because it's not deterministic.
+pub fn generate_slug() -> String can Rand {
+    let len = DEFAULT_SLUG_LEN
+    (0..len)
+        |> map(|_| SLUG_CHARS.char_at(rand.range(0, SLUG_CHARS.len())))
+        |> collect_string
+}
+
+// Validate a URL. Pure string inspection.
+pub fn validate_url(raw: String) -> Option<ShortenerError> {
+    if !raw.starts_with("http://") && !raw.starts_with("https://") {
+        return Some(InvalidUrl(raw))
+    }
+    if raw.len() < 10 {
+        return Some(InvalidUrl(raw))
+    }
+    None
+}
+
+// Build a ShortLink from a CreateRequest. Pure except for slug generation.
+pub fn build_link(req: CreateRequest, now: Timestamp) -> ShortLink can Rand, Fail {
+    // Validate URL
+    if let Some(err) = validate_url(req.url.to_string()) {
+        fail err
+    }
+
+    // Validate or generate slug
+    let slug = match req.custom_slug {
+        Some(s) => {
+            if let Some(err) = validate_slug(s) {
+                fail err
+            }
+            s
+        },
+        None => generate_slug(),
+    }
+
+    let expires_at = req.expires_in |> map(|d| now + d)
+
+    ShortLink {
+        slug,
+        url: req.url,
+        created_at: now,
+        clicks: 0,
+        expires_at,
+        created_by: req.created_by,
+    }
+}

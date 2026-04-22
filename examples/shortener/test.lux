@@ -1,0 +1,208 @@
+// Tests for the URL shortener.
+// Pure tests need nothing. Effectful tests declare what they touch.
+
+import testing.{test, assert, assert_eq}
+import model.{ShortenerError, CreateRequest}
+import slug.{validate_slug, validate_url, build_link}
+import store
+import handler
+
+// --- Pure tests: slug validation ---
+
+test "valid slug passes validation" {
+    assert_eq(validate_slug("my-link"), None)
+    assert_eq(validate_slug("abc1234"), None)
+}
+
+test "slug too short" {
+    assert_eq(validate_slug("abc"), Some(SlugTooShort))
+}
+
+test "slug too long" {
+    let long = "a" |> repeat(33) |> collect_string
+    assert_eq(validate_slug(long), Some(SlugTooLong))
+}
+
+test "slug with invalid characters" {
+    assert(validate_slug("my slug!").is_some())
+    assert(validate_slug("UPPER").is_some())
+}
+
+// --- Pure tests: URL validation ---
+
+test "valid URLs pass" {
+    assert_eq(validate_url("https://example.com"), None)
+    assert_eq(validate_url("http://localhost:3000/path"), None)
+}
+
+test "URLs without scheme fail" {
+    assert(validate_url("example.com").is_some())
+    assert(validate_url("ftp://files.example.com").is_some())
+}
+
+// --- Pure tests: error display ---
+
+test "error messages are human-readable" {
+    let err = SlugTaken("my-link")
+    assert_eq(err.display(), "Slug 'my-link' is already taken")
+}
+
+test "error responses have correct status codes" {
+    assert_eq(error_response(SlugNotFound("x")).status, 404)
+    assert_eq(error_response(SlugTaken("x")).status, 409)
+    assert_eq(error_response(InvalidUrl("x")).status, 400)
+    assert_eq(error_response(Expired("x")).status, 410)
+}
+
+// --- Effectful tests: slug generation ---
+
+test "generated slugs have correct length" can Rand {
+    let slug = generate_slug()
+    assert_eq(slug.len(), 7)
+}
+
+test "generated slugs contain only valid characters" can Rand {
+    for _ in 0..100 {
+        let slug = generate_slug()
+        assert_eq(validate_slug(slug), None)
+    }
+}
+
+// --- Effectful tests: storage layer ---
+
+test "save and retrieve a link" can Db, Rand, Fail {
+    let db = Db.connect("sqlite://:memory:")?
+    migrate()?
+
+    let req = CreateRequest {
+        url: Url.parse("https://example.com")?,
+        custom_slug: Some("test1234"),
+        expires_in: None,
+        created_by: None,
+    }
+    let link = build_link(req, Timestamp.epoch())?
+    store.save_link(link)?
+
+    let found = store.find_link("test1234")?
+    assert(found.is_some())
+    assert_eq(found.unwrap().url.to_string(), "https://example.com")
+}
+
+test "duplicate slug fails" can Db, Rand, Fail {
+    let db = Db.connect("sqlite://:memory:")?
+    migrate()?
+
+    let req = CreateRequest {
+        url: Url.parse("https://example.com")?,
+        custom_slug: Some("dupe1234"),
+        expires_in: None,
+        created_by: None,
+    }
+    let link = build_link(req, Timestamp.epoch())?
+    store.save_link(link)?
+
+    // Second save with same slug should fail
+    let result = catch store.save_link(link) {
+        Ok(_)  => false,
+        Err(SlugTaken(_)) => true,
+        Err(_) => false,
+    }
+    assert(result)
+}
+
+test "click increments counter" can Db, Rand, Fail {
+    let db = Db.connect("sqlite://:memory:")?
+    migrate()?
+
+    let req = CreateRequest {
+        url: Url.parse("https://example.com")?,
+        custom_slug: Some("click123"),
+        expires_in: None,
+        created_by: None,
+    }
+    let link = build_link(req, Timestamp.epoch())?
+    store.save_link(link)?
+
+    let now = Timestamp.epoch() + Duration.seconds(60)
+    store.record_click("click123", now)?
+    store.record_click("click123", now)?
+    store.record_click("click123", now)?
+
+    let stats = store.get_stats("click123")?
+    assert_eq(stats.clicks, 3)
+}
+
+test "expired link returns error" can Db, Rand, Fail {
+    let db = Db.connect("sqlite://:memory:")?
+    migrate()?
+
+    let req = CreateRequest {
+        url: Url.parse("https://example.com")?,
+        custom_slug: Some("expiring"),
+        expires_in: Some(Duration.seconds(60)),
+        created_by: None,
+    }
+    let created_at = Timestamp.epoch()
+    let link = build_link(req, created_at)?
+    store.save_link(link)?
+
+    // Click after expiration
+    let way_later = created_at + Duration.hours(24)
+    let result = catch store.record_click("expiring", way_later) {
+        Ok(_) => false,
+        Err(Expired(_)) => true,
+        Err(_) => false,
+    }
+    assert(result)
+}
+
+// --- Integration test: full HTTP round trip ---
+
+test "POST /links creates a short link" can Db, Time, Rand, Fail {
+    let db = Db.connect("sqlite://:memory:")?
+    migrate()?
+
+    let req = HttpRequest {
+        method: "POST",
+        path: "/links",
+        body: Some(json.encode({
+            url: "https://example.com/very/long/path",
+            custom_slug: "mylink12",
+        })),
+        headers: Map.new(),
+    }
+
+    let response = handler.route(req)?
+    assert_eq(response.status, 201)
+
+    let body = json.decode(response.body)?
+    assert_eq(body.get("slug")?, "mylink12")
+}
+
+test "GET /<slug> redirects" can Db, Time, Rand, Fail {
+    let db = Db.connect("sqlite://:memory:")?
+    migrate()?
+
+    // Create a link first
+    let create_req = HttpRequest {
+        method: "POST",
+        path: "/links",
+        body: Some(json.encode({
+            url: "https://example.com",
+            custom_slug: "redir123",
+        })),
+        headers: Map.new(),
+    }
+    handler.route(create_req)?
+
+    // Now follow it
+    let get_req = HttpRequest {
+        method: "GET",
+        path: "/redir123",
+        body: None,
+        headers: Map.new(),
+    }
+    let response = handler.route(get_req)?
+    assert_eq(response.status, 302)
+    assert_eq(response.headers.get("Location")?, "https://example.com")
+}
