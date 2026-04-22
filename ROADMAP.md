@@ -1,5 +1,14 @@
 # Lux Roadmap
 
+## Two artifacts, not one
+
+Lux produces two things:
+
+1. **The language**: a general-purpose programming language with effect-tracked types, value semantics, and Perceus RC. This is the visible product.
+2. **liblux**: the effect checker as a standalone library. A formal system for tracking what code does to the world, extractable to other languages, AI agent protocols, and CI pipelines. This is the lasting contribution.
+
+The language is the demo. The effect system is the library. See MANIFESTO.md for the full argument.
+
 ## What "building a language" means
 
 A programming language is six things, built in roughly this order:
@@ -117,25 +126,45 @@ Deliverables:
 
 ---
 
-## Phase 5: AI-Native Tooling
+## Phase 5: liblux (The Effect Checker as a Library)
 
-**Goal**: Lux is the best language for AI agents to write.
+**Goal**: Extract the effect system as a standalone tool that works beyond Lux.
 
-This is the differentiator. Every other phase builds a good language. This phase builds the language that AI agents prefer.
+This is the Ghostty/libghostty move. The language validates the effect system. The library makes it available everywhere.
 
 Deliverables:
+- [ ] `liblux-spec`: formal specification of the effect vocabulary, propagation rules, and capability model
+- [ ] `liblux-core`: Rust library implementing effect checking on a generic AST
 - [ ] `lux audit` as a CI gate (reject PRs with unexpected effects)
-- [ ] Capability restriction profiles (define what effects a codebase allows)
-- [ ] AI agent SDK: structured output for effect manifests, type errors, suggestions
-- [ ] Formal verification of effect boundaries
+- [ ] Effect policy files: declare what effects a codebase, module, or function is allowed to use
+- [ ] Adapters for other languages:
+  - [ ] TypeScript plugin (effect annotations in JSDoc or decorators)
+  - [ ] Python static analyzer (`@effects(Net, Fs)` decorators)
+  - [ ] Rust proc macro (`#[can(Net, Db)]`)
+- [ ] AI agent protocol: generated code ships with an effect manifest, orchestrator verifies before execution
 - [ ] Sandbox runtime for untrusted AI-generated code
 - [ ] Benchmark: measure AI code generation accuracy in Lux vs Rust vs Go vs Python
+
+---
+
+## Phase 6: Ecosystem and Adoption
+
+**Goal**: Lux is usable for real projects. liblux is integrated into real CI pipelines.
+
+Deliverables:
+- [ ] Package manager (`lux pkg`)
+- [ ] LSP server (editor integration)
+- [ ] Documentation generator
+- [ ] GitHub Actions for `lux audit` and effect policy enforcement
+- [ ] Case studies: real projects built in Lux, real CI pipelines using liblux
 
 ---
 
 ## What to build first
 
 Phase 0 is where we are. The next concrete step is finishing the specification, then building the tree-walk interpreter. The interpreter is the fastest path to learning whether the language design works.
+
+But the liblux extraction can start in parallel with Phase 1. The effect checking rules are already specified. A standalone Rust library that takes an AST and returns an effect manifest could exist before the full language interpreter does. This is the artifact most likely to matter in the short term: AI agent orchestrators need effect checking now, not after a five-phase language build.
 
 The implementation language question: **Rust** is the pragmatic choice (fast, good ecosystem, pattern matching). **Lux itself** is the aspirational choice (self-hosting, but requires bootstrapping). **Go** is the simple choice (fast compilation, easy to write, but no sum types or pattern matching). **Zig** is the interesting choice (comptime, manual memory, no hidden allocations).
 
