@@ -1,0 +1,82 @@
+// Traits define shared behavior.
+// Like Rust traits, but with effect-aware methods.
+
+trait Display {
+    fn display(let self) -> String
+}
+
+trait Encode {
+    fn encode(let self) -> Bytes
+    fn content_type() -> String
+}
+
+// Implementing a trait for a type.
+impl Display for Forecast {
+    fn display(let self) -> String {
+        let icon = match self.condition {
+            Clear        => "sun",
+            Cloudy       => "cloud",
+            Rain(mm)     => "rain ({mm}mm/hr)",
+            Snow(cm)     => "snow ({cm}cm)",
+            Thunderstorm => "bolt",
+        }
+        "{self.city}: {self.temp}F {icon}"
+    }
+}
+
+impl Encode for Forecast {
+    fn encode(let self) -> Bytes {
+        json.encode(self)
+    }
+
+    fn content_type() -> String {
+        "application/json"
+    }
+}
+
+// Trait bounds in generic functions.
+fn print_all<T: Display>(items: List<T>) can Console {
+    for item in items {
+        print(item.display())
+    }
+}
+
+// Multiple trait bounds.
+fn send_all<T: Encode + Display>(items: List<T>, url: String) can Net, Console, Fail {
+    for item in items {
+        print("Sending {item.display()}...")
+        net.post(url, item.encode(), item.content_type())?
+    }
+}
+
+// Traits can have default implementations.
+trait Summary {
+    fn title(let self) -> String
+    fn body(let self) -> String
+
+    // Default: uses title and body.
+    fn one_line(let self) -> String {
+        "{self.title()}: {self.body()}"
+    }
+}
+
+// Traits can require effects.
+trait Persist {
+    fn save(let self) can Db, Fail
+    fn load(id: String) -> Self can Db, Fail
+}
+
+impl Persist for User {
+    fn save(let self) can Db, Fail {
+        db.upsert("users", self.id, self.encode())?
+    }
+
+    fn load(id: String) -> User can Db, Fail {
+        let row = db.query_one("select * from users where id = ?", id)?
+        User {
+            id: row.get("id")?,
+            name: row.get("name")?,
+            email: row.get("email")?,
+        }
+    }
+}

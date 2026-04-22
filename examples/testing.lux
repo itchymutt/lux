@@ -1,0 +1,75 @@
+// Testing in Lux.
+// Pure functions are trivially testable. No mocks, no setup.
+// Effectful functions are tested by injecting narrowed capabilities.
+
+import testing.{test, assert, assert_eq, assert_near}
+
+// --- Pure tests need nothing special ---
+
+test "line total multiplies price by quantity" {
+    let item = LineItem { name: "Widget", quantity: 3, unit_price: 10.00 }
+    assert_eq(line_total(item), 30.00)
+}
+
+test "empty order has zero total" {
+    let order = Order { items: [], discount: None, tax_rate: 0.08 }
+    let result = summarize(order)
+    assert_eq(result.total, 0)
+}
+
+test "percentage discount applies to subtotal" {
+    let order = Order {
+        items: [
+            LineItem { name: "A", quantity: 1, unit_price: 100.00 },
+        ],
+        discount: Some(Percentage(0.10)),
+        tax_rate: 0.0,
+    }
+    let result = summarize(order)
+    assert_eq(result.discount, 10.00)
+    assert_eq(result.total, 90.00)
+}
+
+test "pattern matching exhaustiveness" {
+    // All enum variants must be handled. The compiler enforces this.
+    // This test verifies the runtime behavior of each branch.
+    assert_eq(parse_condition("clear"), Clear)
+    assert_eq(parse_condition("rain"), Rain(0.0))
+    assert_eq(parse_condition("unknown"), Clear)  // default case
+}
+
+// --- Effectful tests declare their effects ---
+
+test "fetch forecast returns valid data" can Net, Fail {
+    let forecast = fetch_forecast("Seattle")?
+    assert(forecast.temp > -100.0)
+    assert(forecast.temp < 200.0)
+}
+
+// --- Mock effects by injecting narrowed capabilities ---
+
+test "agent cannot access unauthorized domains" can Net {
+    let restricted = Net.restrict(["api.example.com"])
+
+    // This should fail: evil.com is not in the allowlist
+    let result = catch restricted.get("https://evil.com/data") {
+        Ok(_)  => false,
+        Err(_) => true,
+    }
+    assert(result)
+}
+
+test "write report creates file" can Fs, Net, Fail {
+    let tmp = Fs.temp_dir()
+    let fs = Fs.restrict_to(tmp)
+
+    let forecast = Forecast {
+        city: "Test",
+        temp: 72.0,
+        condition: Clear,
+        wind: 5.0,
+    }
+
+    write_report_to(fs, forecast)?
+    assert(fs.exists("{tmp}/Test.json"))
+}

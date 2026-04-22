@@ -17,7 +17,7 @@ enum Condition {
 }
 
 // The entry point. Effects are the union of everything called.
-fn main() can Net, Fs, Console, Fail {
+fn main() can Net, Fs, Env, Console, Fail {
     let city = env.arg(1) ?? "San Francisco"
     let forecast = fetch_forecast(city)?
 

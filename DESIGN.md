@@ -142,20 +142,26 @@ fn fibonacci(n: u64) -> u64 {
 }
 ```
 
-### Capabilities (The Permission Model)
+### How Effects Connect to Code
 
-Effects are tracked in types. Capabilities are how effects are *granted*. The runtime creates capabilities at the entry point. Functions receive only the capabilities they need.
+Each built-in effect corresponds to a standard library module with the same name. `Net` is both an effect and a module. `Fs` is both an effect and a module. The `can` clause is a permission gate: you can only call functions from the `net` module if your function declares `can Net`.
 
 ```lux
 fn main() can Net, Fs, Console, Fail {
-    let config = load_config()?
-    let users = fetch_users(config.api_url)?
-    print(format_report(users))
-    write_report(users, config.output_path)?
+    let config = load_config()?           // load_config uses fs module
+    let users = fetch_users(config.url)?  // fetch_users uses net module
+    print(format_report(users))           // print uses console module
+    write_report(users, config.path)?     // write_report uses fs module
 }
 ```
 
-Capabilities can be narrowed. A sandbox restricts what the callee can reach:
+No magic globals. No hidden parameters. `net.get(url)` is a normal function call to the `net` module. The compiler checks that the calling function has declared `can Net`. If it hasn't, the call is a compile error.
+
+This means the effect system is not a separate layer bolted onto the language. It IS the module permission system. Effects are modules. Modules are effects. One concept, not two.
+
+### Capability Narrowing (Sandboxing)
+
+Capabilities can be narrowed for sandboxing. A restricted capability looks identical to the callee but limits what it can reach:
 
 ```lux
 fn run_sandboxed() can Net, Fs, Fail {
@@ -163,9 +169,19 @@ fn run_sandboxed() can Net, Fs, Fail {
     let fs = Fs.restrict_to("/tmp/sandbox")
     agent_task(net, fs)?
 }
+
+// This function doesn't know it's restricted.
+// It receives Net and Fs that look normal but are narrowed.
+fn agent_task(net: Net, fs: Fs) -> AgentOutput can Fail {
+    let data = net.get("https://api.example.com/data")?  // OK
+    // net.get("https://evil.com/steal")  would fail at runtime
+    let result = transform(data.body)
+    fs.write("output.json", result)?
+    AgentOutput { path: "output.json", size: result.len() }
+}
 ```
 
-The agent function receives `Net` and `Fs` that look normal but are narrowed. It cannot access domains or paths outside the restriction. This is enforced by the type system, not a runtime sandbox.
+When a function receives a narrowed capability as a parameter, it uses that parameter instead of the module global. This is the only case where capabilities appear as function parameters: when the caller is restricting what the callee can do.
 
 ### The `.` Shorthand (Field Projections in Closures)
 
@@ -258,6 +274,29 @@ fn load_user(id: UserId) -> User can Net, Db, Fail {
 }
 ```
 
+### Operators for Absence
+
+Lux has no null. `Option<T>` represents values that might not exist. Two operators make working with optionals concise:
+
+```lux
+// ?? is the nil coalescing operator. Use the left side, or fall back to the right.
+let city = env.arg(1) ?? "San Francisco"
+let name = user.nickname ?? user.full_name ?? "Anonymous"
+
+// ? propagates failure. If the left side is None or Err, return early.
+let user = find_user(id)?
+```
+
+`??` can also take a block for computed defaults:
+
+```lux
+let cached = cache.get(id) ?? {
+    let fresh = compute_expensive_thing()
+    cache.set(id, fresh)
+    fresh
+}
+```
+
 ### String Interpolation
 
 ```lux
@@ -265,6 +304,16 @@ let name = "world"
 let greeting = "Hello, {name}"
 let math = "2 + 2 = {2 + 2}"
 let nested = "User {user.name} has {user.items.len()} items"
+```
+
+### String Concatenation
+
+```lux
+// ++ concatenates strings. Not +. Strings are not numbers.
+let full = first_name ++ " " ++ last_name
+let multiline = "line one\n"
+             ++ "line two\n"
+             ++ "line three"
 ```
 
 ### Modules
