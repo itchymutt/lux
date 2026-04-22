@@ -1,5 +1,5 @@
 // HTTP handlers. Thin layer that translates HTTP to domain operations.
-// Each handler declares its full effect set.
+// db is passed as a capability (explicit), net/time are module access (implicit).
 
 import model.{CreateRequest, ShortenerError}
 import store
@@ -19,40 +19,42 @@ struct HttpResponse {
 }
 
 // Route an incoming request to the right handler.
-pub fn route(req: HttpRequest) -> HttpResponse can Db, Time, Rand, Fail {
+// db is a capability parameter: no `can Db` needed.
+// Time and Rand are module access: declared in `can`.
+pub fn route(db: Db, req: HttpRequest) -> HttpResponse can Time, Rand, Fail {
     match (req.method, req.path) {
-        ("POST", "/links")     => create(req),
-        ("GET", "/links")      => list(req),
-        ("GET", path) if path.starts_with("/stats/") => stats(req),
-        ("DELETE", path) if path.starts_with("/links/") => delete(req),
-        ("GET", _)             => redirect(req),
+        ("POST", "/links")     => create(db, req),
+        ("GET", "/links")      => list(db, req),
+        ("GET", path) if path.starts_with("/stats/") => stats(db, req),
+        ("DELETE", path) if path.starts_with("/links/") => delete(db, req),
+        ("GET", _)             => redirect(db, req),
         _                      => not_found(),
     }
 }
 
-fn create(req: HttpRequest) -> HttpResponse can Db, Time, Rand, Fail {
-    let body = req.body ?? fail json_error("Missing request body")
+fn create(db: Db, req: HttpRequest) -> HttpResponse can Time, Rand, Fail {
+    let body = req.body ?? fail InvalidUrl("Missing request body")
     let create_req = json.decode(body)?
     let now = time.now()
     let link = build_link(create_req, now)?
 
-    store.save_link(link)?
+    store.save_link(db, link)?
 
-    json_response(201, {
+    json_response(201, #{
         slug: link.slug,
         url: link.url.to_string(),
         short_url: "https://sho.rt/{link.slug}",
     })
 }
 
-fn redirect(req: HttpRequest) -> HttpResponse can Db, Time, Fail {
+fn redirect(db: Db, req: HttpRequest) -> HttpResponse can Time, Fail {
     let slug = req.path.trim_start("/")
     if slug.is_empty() {
         return not_found()
     }
 
     let now = time.now()
-    let url = catch store.record_click(slug, now) {
+    let url = catch store.record_click(db, slug, now) {
         Ok(url) => url,
         Err(Expired(_)) => return gone(slug),
         Err(SlugNotFound(_)) => return not_found(),
@@ -62,15 +64,15 @@ fn redirect(req: HttpRequest) -> HttpResponse can Db, Time, Fail {
     HttpResponse {
         status: 302,
         body: "",
-        headers: Map.from([("Location", url.to_string())]),
+        headers: #{ "Location": url.to_string() },
     }
 }
 
-fn stats(req: HttpRequest) -> HttpResponse can Db, Fail {
+fn stats(db: Db, req: HttpRequest) -> HttpResponse can Fail {
     let slug = req.path.trim_start("/stats/")
-    let stats = store.get_stats(slug)?
+    let stats = store.get_stats(db, slug)?
 
-    json_response(200, {
+    json_response(200, #{
         slug: stats.slug,
         url: stats.url.to_string(),
         clicks: stats.clicks,
@@ -80,46 +82,42 @@ fn stats(req: HttpRequest) -> HttpResponse can Db, Fail {
     })
 }
 
-fn list(req: HttpRequest) -> HttpResponse can Db, Fail {
+fn list(db: Db, req: HttpRequest) -> HttpResponse can Fail {
     let limit = req.headers.get("X-Limit")
         |> flat_map(parse_u32)
         ?? 20
 
-    let links = store.list_recent(limit)?
-    let items = links |> map(|link| {
+    let links = store.list_recent(db, limit)?
+    let items = links |> map(|link| #{
         slug: link.slug,
         url: link.url.to_string(),
         clicks: link.clicks,
         created_at: link.created_at.to_string(),
     })
 
-    json_response(200, { links: items })
+    json_response(200, #{ links: items })
 }
 
-fn delete(req: HttpRequest) -> HttpResponse can Db, Fail {
+fn delete(db: Db, req: HttpRequest) -> HttpResponse can Fail {
     let slug = req.path.trim_start("/links/")
-    store.delete_link(slug)?
-    json_response(204, {})
+    store.delete_link(db, slug)?
+    json_response(204, #{})
 }
 
 // --- Response helpers (pure) ---
 
-fn json_response(status: u16, data: impl Encode) -> HttpResponse {
+fn json_response(status: u16, data: Record) -> HttpResponse {
     HttpResponse {
         status,
         body: json.encode(data),
-        headers: Map.from([("Content-Type", "application/json")]),
+        headers: #{ "Content-Type": "application/json" },
     }
 }
 
 fn not_found() -> HttpResponse {
-    json_response(404, { error: "Not found" })
+    json_response(404, #{ error: "Not found" })
 }
 
 fn gone(slug: String) -> HttpResponse {
-    json_response(410, { error: "Link '{slug}' has expired" })
-}
-
-fn json_error(msg: String) -> ShortenerError {
-    InvalidUrl(msg)  // TODO: need a generic error variant
+    json_response(410, #{ error: "Link '{slug}' has expired" })
 }

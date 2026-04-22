@@ -1,10 +1,10 @@
-// Storage layer. This is where effects live.
-// Every function here declares exactly what it touches.
+// Storage layer.
+// db is a capability parameter, not module access.
+// Every function takes db explicitly: you know which database, always.
 
 import model.{ShortLink, Stats, ShortenerError}
 
-// Save a new short link. Fails if the slug is already taken.
-pub fn save_link(link: ShortLink) can Db, Fail {
+pub fn save_link(db: Db, link: ShortLink) can Fail {
     let existing = db.query_opt(
         "select slug from links where slug = ?",
         link.slug,
@@ -20,17 +20,14 @@ pub fn save_link(link: ShortLink) can Db, Fail {
     )?
 }
 
-// Look up a link by slug. Returns None if not found.
-pub fn find_link(slug: String) -> Option<ShortLink> can Db, Fail {
+pub fn find_link(db: Db, slug: String) -> Option<ShortLink> can Fail {
     db.query_opt("select * from links where slug = ?", slug)?
         |> map(row_to_link)
 }
 
-// Increment the click counter and return the destination URL.
-pub fn record_click(slug: String, now: Timestamp) -> Url can Db, Fail {
-    let link = find_link(slug)? ?? fail SlugNotFound(slug)
+pub fn record_click(db: Db, slug: String, now: Timestamp) -> Url can Fail {
+    let link = find_link(db, slug)? ?? fail SlugNotFound(slug)
 
-    // Check expiration
     if let Some(expires) = link.expires_at {
         if now > expires {
             fail Expired(slug)
@@ -45,9 +42,8 @@ pub fn record_click(slug: String, now: Timestamp) -> Url can Db, Fail {
     link.url
 }
 
-// Get stats for a link.
-pub fn get_stats(slug: String) -> Stats can Db, Fail {
-    let link = find_link(slug)? ?? fail SlugNotFound(slug)
+pub fn get_stats(db: Db, slug: String) -> Stats can Fail {
+    let link = find_link(db, slug)? ?? fail SlugNotFound(slug)
 
     let last_clicked = db.query_opt(
         "select last_clicked from links where slug = ?",
@@ -64,17 +60,15 @@ pub fn get_stats(slug: String) -> Stats can Db, Fail {
     }
 }
 
-// Delete a link.
-pub fn delete_link(slug: String) can Db, Fail {
-    let exists = find_link(slug)?
+pub fn delete_link(db: Db, slug: String) can Fail {
+    let exists = find_link(db, slug)?
     if exists.is_none() {
         fail SlugNotFound(slug)
     }
     db.execute("delete from links where slug = ?", slug)?
 }
 
-// List recent links. Returns newest first.
-pub fn list_recent(limit: u32) -> List<ShortLink> can Db, Fail {
+pub fn list_recent(db: Db, limit: u32) -> List<ShortLink> can Fail {
     db.query(
         "select * from links order by created_at desc limit ?",
         limit,
@@ -82,7 +76,6 @@ pub fn list_recent(limit: u32) -> List<ShortLink> can Db, Fail {
         |> map(row_to_link)
 }
 
-// Pure: convert a database row to a ShortLink.
 fn row_to_link(row: Row) -> ShortLink {
     ShortLink {
         slug: row.get("slug"),

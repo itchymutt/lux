@@ -1,8 +1,9 @@
 // Entry point for the URL shortener.
-// This is where all capabilities are granted and the server starts.
+// Capabilities are created here and flow downward.
+// net.serve is module access (can Net).
+// db is a capability value, passed to every handler.
 
 import handler
-import store
 
 struct Config {
     port: u16,
@@ -10,16 +11,16 @@ struct Config {
     base_url: String,
 }
 
-fn main() can Net, Db, Env, Console, Fail {
+fn main() can Net, Env, Console, Fail {
     let config = load_config()?
-    db.connect(config.database_url)?
-    migrate()?
+    let db = Db.connect(config.database_url)?
+    migrate(db)?
 
     print("shortener running on port {config.port}")
     print("base url: {config.base_url}")
 
     net.serve(config.port, |req| {
-        catch handler.route(req) {
+        catch handler.route(db, req) {
             Ok(response) => response,
             Err(e) => error_response(e),
         }
@@ -34,7 +35,7 @@ fn load_config() -> Config can Env, Fail {
     }
 }
 
-fn migrate() can Db, Fail {
+fn migrate(db: Db) can Fail {
     db.execute("
         create table if not exists links (
             slug        text primary key,
@@ -48,20 +49,19 @@ fn migrate() can Db, Fail {
     ")?
 }
 
-// Pure: convert any error into an HTTP response.
 fn error_response(e: ShortenerError) -> HttpResponse {
     let status = match e {
-        SlugTaken(_)       => 409,
-        SlugNotFound(_)    => 404,
-        InvalidUrl(_)      => 400,
-        SlugTooShort       => 400,
-        SlugTooLong        => 400,
+        SlugTaken(_)        => 409,
+        SlugNotFound(_)     => 404,
+        InvalidUrl(_)       => 400,
+        SlugTooShort        => 400,
+        SlugTooLong         => 400,
         SlugInvalidChars(_) => 400,
-        Expired(_)         => 410,
+        Expired(_)          => 410,
     }
     HttpResponse {
         status,
-        body: json.encode({ error: e.display() }),
-        headers: Map.from([("Content-Type", "application/json")]),
+        body: json.encode(#{ error: e.display() }),
+        headers: #{ "Content-Type": "application/json" },
     }
 }
