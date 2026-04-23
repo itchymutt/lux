@@ -90,8 +90,8 @@ pub fn check_module(module: &Module) -> Vec<EffectError> {
             crate::ast::Item::Function(func) => {
                 check_function(func, &mut errors);
             }
-            crate::ast::Item::Struct(_) => {
-                // Struct definitions have no effects
+            crate::ast::Item::Struct(_) | crate::ast::Item::Enum(_) => {
+                // Type definitions have no effects
             }
         }
     }
@@ -150,6 +150,12 @@ fn check_expr(
         }
         Expr::FieldAccess { object, .. } => {
             check_expr(object, declared, func_name, errors);
+        }
+        Expr::Match { subject, arms, .. } => {
+            check_expr(subject, declared, func_name, errors);
+            for arm in arms {
+                check_expr(&arm.body, declared, func_name, errors);
+            }
         }
         Expr::StringLit(_, _)
         | Expr::IntLit(_, _)

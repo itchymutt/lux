@@ -13,6 +13,10 @@ pub enum Value {
         name: String,
         fields: HashMap<String, Value>,
     },
+    Enum {
+        variant: String,
+        fields: Vec<Value>,
+    },
     Unit,
 }
 
@@ -29,6 +33,14 @@ impl std::fmt::Display for Value {
                     .map(|(k, v)| format!("{k}: {v}"))
                     .collect();
                 write!(f, "{name} {{ {} }}", pairs.join(", "))
+            }
+            Value::Enum { variant, fields } => {
+                if fields.is_empty() {
+                    write!(f, "{variant}")
+                } else {
+                    let parts: Vec<String> = fields.iter().map(|v| v.to_string()).collect();
+                    write!(f, "{variant}({})", parts.join(", "))
+                }
             }
             Value::Unit => write!(f, "()"),
         }
@@ -85,6 +97,11 @@ impl Env {
     }
 }
 
+/// Variant info: how many fields a variant takes.
+struct VariantInfo {
+    arity: usize,
+}
+
 /// Execute a module by finding and running `fn main()`.
 pub fn execute(module: &Module) -> Result<(), RuntimeError> {
     // Build function table
@@ -93,9 +110,24 @@ pub fn execute(module: &Module) -> Result<(), RuntimeError> {
         .iter()
         .filter_map(|item| match item {
             crate::ast::Item::Function(f) => Some((f.name.as_str(), f)),
-            crate::ast::Item::Struct(_) => None,
+            _ => None,
         })
         .collect();
+
+    // Build variant table (variant name -> arity)
+    let mut variants: HashMap<String, VariantInfo> = HashMap::new();
+    for item in &module.items {
+        if let crate::ast::Item::Enum(enum_def) = item {
+            for variant in &enum_def.variants {
+                variants.insert(
+                    variant.name.clone(),
+                    VariantInfo {
+                        arity: variant.fields.len(),
+                    },
+                );
+            }
+        }
+    }
 
     if !functions.contains_key("main") {
         return Err(RuntimeError {
@@ -105,7 +137,7 @@ pub fn execute(module: &Module) -> Result<(), RuntimeError> {
     }
 
     let mut env = Env::new();
-    call_function("main", &[], &functions, &mut env)?;
+    call_function("main", &[], &functions, &variants, &mut env)?;
     Ok(())
 }
 
@@ -113,6 +145,7 @@ fn call_function(
     name: &str,
     args: &[Value],
     functions: &HashMap<&str, &Function>,
+    variants: &HashMap<String, VariantInfo>,
     env: &mut Env,
 ) -> Result<Value, RuntimeError> {
     let func = functions.get(name).ok_or_else(|| RuntimeError {
@@ -129,7 +162,7 @@ fn call_function(
     // Execute body, last expression is the return value
     let mut result = Value::Unit;
     for stmt in &func.body {
-        result = exec_stmt(stmt, functions, env)?;
+        result = exec_stmt(stmt, functions, variants, env)?;
     }
 
     env.pop_frame();
@@ -139,12 +172,13 @@ fn call_function(
 fn exec_stmt(
     stmt: &Stmt,
     functions: &HashMap<&str, &Function>,
+    variants: &HashMap<String, VariantInfo>,
     env: &mut Env,
 ) -> Result<Value, RuntimeError> {
     match stmt {
-        Stmt::Expr(expr) => eval_expr(expr, functions, env),
+        Stmt::Expr(expr) => eval_expr(expr, functions, variants, env),
         Stmt::Let(let_stmt) => {
-            let val = eval_expr(&let_stmt.value, functions, env)?;
+            let val = eval_expr(&let_stmt.value, functions, variants, env)?;
             env.define(let_stmt.name.clone(), val);
             Ok(Value::Unit)
         }
@@ -154,6 +188,7 @@ fn exec_stmt(
 fn eval_expr(
     expr: &Expr,
     functions: &HashMap<&str, &Function>,
+    variants: &HashMap<String, VariantInfo>,
     env: &mut Env,
 ) -> Result<Value, RuntimeError> {
     match expr {
@@ -162,10 +197,29 @@ fn eval_expr(
         Expr::FloatLit(n, _) => Ok(Value::Float(*n)),
         Expr::BoolLit(b, _) => Ok(Value::Bool(*b)),
 
-        Expr::Ident(name, span) => env.get(name).cloned().ok_or_else(|| RuntimeError {
-            message: format!("undefined variable `{name}`"),
-            offset: span.start,
-        }),
+        Expr::Ident(name, span) => {
+            // Check variables first, then zero-arity enum variants
+            if let Some(val) = env.get(name) {
+                Ok(val.clone())
+            } else if let Some(info) = variants.get(name.as_str()) {
+                if info.arity == 0 {
+                    Ok(Value::Enum {
+                        variant: name.clone(),
+                        fields: vec![],
+                    })
+                } else {
+                    Err(RuntimeError {
+                        message: format!("`{name}` is a variant that takes {} argument(s)", info.arity),
+                        offset: span.start,
+                    })
+                }
+            } else {
+                Err(RuntimeError {
+                    message: format!("undefined variable `{name}`"),
+                    offset: span.start,
+                })
+            }
+        }
 
         Expr::BinOp {
             op,
@@ -173,8 +227,8 @@ fn eval_expr(
             right,
             span,
         } => {
-            let lhs = eval_expr(left, functions, env)?;
-            let rhs = eval_expr(right, functions, env)?;
+            let lhs = eval_expr(left, functions, variants, env)?;
+            let rhs = eval_expr(right, functions, variants, env)?;
             eval_binop(*op, &lhs, &rhs, *span)
         }
 
@@ -192,15 +246,21 @@ fn eval_expr(
             // Evaluate arguments
             let arg_values: Vec<Value> = args
                 .iter()
-                .map(|a| eval_expr(a, functions, env))
+                .map(|a| eval_expr(a, functions, variants, env))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            // Try builtins first, then user-defined functions
+            // Try builtins, then variants, then user-defined functions
             match func_name {
                 "print" | "println" => builtin_print(&arg_values),
                 _ => {
-                    if functions.contains_key(func_name) {
-                        call_function(func_name, &arg_values, functions, env)
+                    if let Some(_info) = variants.get(func_name) {
+                        // Enum variant construction
+                        Ok(Value::Enum {
+                            variant: func_name.to_string(),
+                            fields: arg_values,
+                        })
+                    } else if functions.contains_key(func_name) {
+                        call_function(func_name, &arg_values, functions, variants, env)
                     } else {
                         Err(RuntimeError {
                             message: format!("undefined function `{func_name}`"),
@@ -218,7 +278,7 @@ fn eval_expr(
         } => {
             let mut field_values = HashMap::new();
             for field in fields {
-                let val = eval_expr(&field.value, functions, env)?;
+                let val = eval_expr(&field.value, functions, variants, env)?;
                 field_values.insert(field.name.clone(), val);
             }
             Ok(Value::Struct {
@@ -232,7 +292,7 @@ fn eval_expr(
             field,
             span,
         } => {
-            let obj = eval_expr(object, functions, env)?;
+            let obj = eval_expr(object, functions, variants, env)?;
             match &obj {
                 Value::Struct { fields, name } => {
                     fields.get(field).cloned().ok_or_else(|| RuntimeError {
@@ -246,6 +306,79 @@ fn eval_expr(
                 }),
             }
         }
+
+        Expr::Match {
+            subject,
+            arms,
+            span,
+        } => {
+            let val = eval_expr(subject, functions, variants, env)?;
+            for arm in arms {
+                if let Some(bindings) = match_pattern(&arm.pattern, &val, variants) {
+                    env.push_frame();
+                    for (name, bound_val) in bindings {
+                        env.define(name, bound_val);
+                    }
+                    let result = eval_expr(&arm.body, functions, variants, env)?;
+                    env.pop_frame();
+                    return Ok(result);
+                }
+            }
+            Err(RuntimeError {
+                message: "no match arm matched".into(),
+                offset: span.start,
+            })
+        }
+    }
+}
+
+/// Try to match a value against a pattern. Returns bindings if successful.
+fn match_pattern(
+    pattern: &crate::ast::Pattern,
+    value: &Value,
+    variants: &HashMap<String, VariantInfo>,
+) -> Option<Vec<(String, Value)>> {
+    use crate::ast::Pattern;
+    match pattern {
+        Pattern::Wildcard(_) => Some(vec![]),
+        Pattern::Ident(name, _) => {
+            // If the name is a known zero-arity variant, match against it
+            if let Some(info) = variants.get(name.as_str()) {
+                if info.arity == 0 {
+                    if let Value::Enum { variant, fields } = value {
+                        if variant == name && fields.is_empty() {
+                            return Some(vec![]);
+                        }
+                    }
+                    return None;
+                }
+            }
+            // Otherwise it's a catch-all variable binding
+            Some(vec![(name.clone(), value.clone())])
+        }
+        Pattern::IntLit(n, _) => {
+            if let Value::Int(v) = value {
+                if v == n {
+                    return Some(vec![]);
+                }
+            }
+            None
+        }
+        Pattern::Variant {
+            name, bindings, ..
+        } => {
+            if let Value::Enum { variant, fields } = value {
+                if variant == name && fields.len() == bindings.len() {
+                    let bound: Vec<(String, Value)> = bindings
+                        .iter()
+                        .zip(fields.iter())
+                        .map(|(b, v)| (b.clone(), v.clone()))
+                        .collect();
+                    return Some(bound);
+                }
+            }
+            None
+        }
     }
 }
 
@@ -256,6 +389,7 @@ fn value_type_name(v: &Value) -> &'static str {
         Value::Float(_) => "Float",
         Value::Bool(_) => "Bool",
         Value::Struct { .. } => "Struct",
+        Value::Enum { .. } => "Enum",
         Value::Unit => "Unit",
     }
 }

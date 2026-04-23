@@ -11,6 +11,21 @@ pub struct Module {
 pub enum Item {
     Function(Function),
     Struct(StructDef),
+    Enum(EnumDef),
+}
+
+#[derive(Debug)]
+pub struct EnumDef {
+    pub name: String,
+    pub variants: Vec<VariantDef>,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct VariantDef {
+    pub name: String,
+    pub fields: Vec<TypeExpr>,  // positional fields
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -114,6 +129,35 @@ pub enum Expr {
         field: String,
         span: Span,
     },
+    /// Match expression
+    Match {
+        subject: Box<Expr>,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
+}
+
+#[derive(Debug)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub enum Pattern {
+    /// Variant pattern: Circle(r) or Rect(w, h)
+    Variant {
+        name: String,
+        bindings: Vec<String>,
+        span: Span,
+    },
+    /// Wildcard: _
+    Wildcard(Span),
+    /// Literal int
+    IntLit(i64, Span),
+    /// Variable binding (catch-all)
+    Ident(String, Span),
 }
 
 impl Expr {
@@ -128,6 +172,7 @@ impl Expr {
             Expr::BinOp { span, .. } => *span,
             Expr::StructLit { span, .. } => *span,
             Expr::FieldAccess { span, .. } => *span,
+            Expr::Match { span, .. } => *span,
         }
     }
 }
