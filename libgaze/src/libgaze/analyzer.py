@@ -1,7 +1,7 @@
 """
 Static effect analyzer for Python source code.
 
-Walks the AST and reports which of the 10 Lux effects each function performs.
+Walks the AST and reports which of the 10 Gaze effects each function performs.
 This is conservative: if we can't prove a function is pure, we report the
 effects we can detect. We don't claim completeness (Python is dynamic),
 but we catch the common patterns.
@@ -42,6 +42,7 @@ class ModuleEffects:
     """The effects detected in an entire module (file)."""
 
     path: str
+    source: str = ""  # original source text, for showing context in output
     functions: list[FunctionEffects] = field(default_factory=list)
     module_level_effects: set[Effect] = field(default_factory=set)
     imports: dict = field(default_factory=dict)  # alias -> module
@@ -71,6 +72,7 @@ class EffectAnalyzer(ast.NodeVisitor):
         self._imports: dict = {}  # alias -> full module name
 
     def analyze(self, source: str) -> ModuleEffects:
+        self.result.source = source
         tree = ast.parse(source)
         self.visit(tree)
         self.result.imports = dict(self._imports)

@@ -2,9 +2,11 @@
 libgaze CLI.
 
 Usage:
-    libgaze check <file.py>              Report effects in a Python file
+    libgaze check <file.py>              Report effects with source context
     libgaze check <file.py> --json       Output as JSON manifest
-    libgaze policy <file.py> -p .gazepolicy   Check against a policy file
+    libgaze check <file.py> --quiet      Terse output (no source lines)
+    libgaze check <file.py> --deny Unsafe,Db   Fail if these effects are found
+    libgaze policy <file.py> -p .gazepolicy    Check against a policy file
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import sys
 from pathlib import Path
 
 from .analyzer import ModuleEffects, analyze_file
+from .effects import Effect
 from .policy import check_policy, load_policy
 
 
@@ -34,7 +37,13 @@ def main() -> None:
         "--json", action="store_true", dest="json_output", help="Output as JSON"
     )
     check_parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Show evidence for each effect"
+        "--quiet", "-q", action="store_true", help="Terse output (no source lines)"
+    )
+    check_parser.add_argument(
+        "--deny",
+        type=str,
+        default=None,
+        help="Comma-separated effects to deny (exits non-zero if found)",
     )
 
     # policy command
@@ -70,8 +79,18 @@ def run_check(args: argparse.Namespace) -> None:
 
     if args.json_output:
         print(json.dumps(to_json(result), indent=2))
-    else:
-        print_report(result, verbose=args.verbose)
+        return
+
+    print_report(result, quiet=args.quiet)
+
+    # --deny: exit non-zero if denied effects are found
+    if args.deny:
+        denied = {Effect(e.strip()) for e in args.deny.split(",")}
+        found = result.all_effects & denied
+        if found:
+            names = ", ".join(sorted(str(e) for e in found))
+            print(f"\nFAIL  denied effects found: {names}")
+            sys.exit(1)
 
 
 def run_policy(args: argparse.Namespace) -> None:
@@ -98,7 +117,13 @@ def run_policy(args: argparse.Namespace) -> None:
             print(f"FAIL  {args.file}")
             print()
             for v in violations:
-                print(f"  {v}")
+                # Show source context for the violation
+                source_line = _get_source_line(result.source, v.line)
+                if source_line and v.line > 0:
+                    print(f"  {v.function}:{v.line}  {v.effect} -- {v.reason}")
+                    print(f"    {v.line} | {source_line}")
+                else:
+                    print(f"  {v.function}  {v.effect} -- {v.reason}")
             print()
             print(f"{len(violations)} violation(s) found.")
             sys.exit(1)
@@ -106,7 +131,7 @@ def run_policy(args: argparse.Namespace) -> None:
             print(f"PASS  {args.file}")
 
 
-def print_report(result: ModuleEffects, verbose: bool = False) -> None:
+def print_report(result: ModuleEffects, quiet: bool = False) -> None:
     effects = result.all_effects
     if not effects:
         print(f"{result.path}  (pure)")
@@ -116,15 +141,23 @@ def print_report(result: ModuleEffects, verbose: bool = False) -> None:
     print(f"{result.path}  can {effect_str}")
     print()
 
+    source_lines = result.source.splitlines() if result.source else []
+
     for fn in result.functions:
         if fn.is_pure:
             print(f"  {fn.name}:{fn.lineno}  (pure)")
         else:
             fn_effects = ", ".join(sorted(str(e) for e in fn.effects))
             print(f"  {fn.name}:{fn.lineno}  can {fn_effects}")
-            if verbose:
+            if not quiet:
                 for ev in fn.evidence:
-                    print(f"    {ev}")
+                    # Parse "subprocess.run() (line 10)" to get line number
+                    ev_line = _parse_evidence_line(ev)
+                    if ev_line and 0 < ev_line <= len(source_lines):
+                        src = source_lines[ev_line - 1].strip()
+                        print(f"    {ev_line} | {src}")
+                    else:
+                        print(f"    {ev}")
 
     if result.module_level_effects:
         print()
@@ -139,6 +172,27 @@ def print_report(result: ModuleEffects, verbose: bool = False) -> None:
     if total > 0:
         print()
         print(f"{pure_count}/{total} functions are pure.")
+
+
+def _parse_evidence_line(evidence: str) -> int | None:
+    """Extract line number from evidence string like 'subprocess.run() (line 10)'."""
+    try:
+        if "(line " in evidence:
+            part = evidence.split("(line ")[1].rstrip(")")
+            return int(part)
+    except (IndexError, ValueError):
+        pass
+    return None
+
+
+def _get_source_line(source: str, lineno: int) -> str | None:
+    """Get a source line by 1-indexed line number."""
+    if not source or lineno < 1:
+        return None
+    lines = source.splitlines()
+    if lineno <= len(lines):
+        return lines[lineno - 1].strip()
+    return None
 
 
 def to_json(result: ModuleEffects) -> dict:

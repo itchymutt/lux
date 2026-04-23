@@ -1,5 +1,5 @@
 """
-The ten Lux effects and their mapping to Python modules/functions.
+The ten Gaze effects and their mapping to Python modules/functions.
 
 This is the vocabulary. Every entry here is a claim:
 "calling this Python function performs this effect."
