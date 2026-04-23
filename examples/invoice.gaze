@@ -1,0 +1,37 @@
+// Pure business logic. No effects. No world access.
+// Testable without mocks. Reproducible. Safe by construction.
+
+struct Item {
+    name: String,
+    price: Int,
+    qty: Int,
+}
+
+enum Discount {
+    Percent(Int),
+    Fixed(Int),
+    None,
+}
+
+fn line_total(item: Item) -> Int {
+    item.price * item.qty
+}
+
+fn apply_discount(subtotal: Int, d: Discount) -> Int {
+    match d {
+        Percent(pct) => subtotal - subtotal * pct / 100,
+        Fixed(amount) => subtotal - amount,
+        None => subtotal,
+    }
+}
+
+fn main() can Console {
+    let a = Item { name: "Widget", price: 10, qty: 3 }
+    let b = Item { name: "Gadget", price: 5, qty: 2 }
+
+    let subtotal = line_total(a) + line_total(b)
+    let total = subtotal |> apply_discount(Percent(10))
+
+    print(subtotal)
+    print(total)
+}
