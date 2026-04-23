@@ -243,10 +243,43 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_comparison()
+        self.parse_pipeline()
     }
 
-    // Precedence climbing: comparison < additive < multiplicative < call < primary
+    // Precedence climbing: pipeline < comparison < additive < multiplicative < call < primary
+
+    fn parse_pipeline(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_comparison()?;
+        while self.check(&TokenKind::Pipe) {
+            self.advance();
+            // Right side is a function (or chain of calls).
+            // `a |> f` desugars to `f(a)`
+            // `a |> f(b)` desugars to `f(a, b)` — left becomes first arg
+            let right = self.parse_comparison()?;
+            let span = Span::new(left.span().start as usize, right.span().end as usize);
+            left = match right {
+                Expr::Call { callee, mut args, span: call_span } => {
+                    // a |> f(b, c) => f(a, b, c)
+                    args.insert(0, left);
+                    Expr::Call {
+                        callee,
+                        args,
+                        span: Span::new(span.start as usize, call_span.end as usize),
+                    }
+                }
+                callee => {
+                    // a |> f => f(a)
+                    Expr::Call {
+                        callee: Box::new(callee),
+                        args: vec![left],
+                        span,
+                    }
+                }
+            };
+        }
+        Ok(left)
+    }
+
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
         let mut left = self.parse_additive()?;
         loop {
