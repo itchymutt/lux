@@ -34,11 +34,23 @@ style: |
   em { color: var(--accent); font-style: italic; }
   code { background: var(--surface); color: var(--fg); padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
   pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; font-size: 20px; line-height: 1.6; }
-  pre code { background: none; padding: 0; }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  pre code .hljs-keyword, pre code .token.keyword { color: #c4a7ff !important; }
+  pre code .hljs-string, pre code .token.string { color: #7dd3a8 !important; }
+  pre code .hljs-function, pre code .token.function { color: #7cc4ff !important; }
+  pre code .hljs-comment, pre code .token.comment { color: #4d5a6e !important; }
+  pre code .hljs-built_in, pre code .token.builtin { color: #f0b67f !important; }
+  pre code .hljs-number, pre code .token.number { color: #f0b67f !important; }
+  pre code .hljs-title, pre code .token.class-name { color: #7cc4ff !important; }
+  pre code .hljs-params { color: var(--fg) !important; }
+  pre code .hljs-attr, pre code .token.attr-name { color: #c4a7ff !important; }
   mark { background: rgba(108,159,255,0.15); color: #fff; padding: 2px 6px; border-radius: 3px; }
-  table { width: 100%; border-collapse: collapse; font-size: 22px; }
-  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  td { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(255,255,255,0.55); }
+  table { width: 100%; border-collapse: collapse; font-size: 22px; background: transparent !important; }
+  th { text-align: left; color: var(--muted) !important; font-weight: 500; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: transparent !important; }
+  td { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(255,255,255,0.55) !important; background: transparent !important; }
+  td strong { color: #fff !important; }
+  tr { background: transparent !important; }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02) !important; }
   section.lead { display: flex; flex-direction: column; justify-content: center; }
   section.lead h1 { font-size: 64px; }
   section.centered { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
@@ -193,13 +205,20 @@ This is the Ghostty/libghostty insight. Mitchell Hashimoto built Ghostty as a te
 
 ---
 
-## Lux is the language.
-## liblux is the library.
+<!-- _class: lead -->
 
-<br>
+# Lux is the language.<br>liblux is the library.
 
-**liblux** is the effect checker extracted as a standalone tool.
-It works on **existing Python code**. No new language needed.
+The effect checker, extracted as a standalone tool.
+Works on **existing Python code**. No new language needed.
+
+<!--
+liblux exists today. It's a Python package that scans your code and reports which of the 10 effects each function performs. It walks the AST, resolves imports, and maps 80+ Python modules to effects. 22 tests passing. The language is the long game. The library ships now.
+-->
+
+---
+
+## liblux in action
 
 ```
 $ liblux check agent.py
@@ -214,8 +233,11 @@ agent.py  can Db, Env, Fs, Unsafe
 0/4 functions are pure.
 ```
 
+Four functions. Four effect signatures. Zero are pure.
+The manifest tells you everything before you run a line.
+
 <!--
-liblux exists today. It's a Python package that scans your code and reports which of the 10 effects each function performs. It walks the AST, resolves imports, and maps 80+ Python modules to effects. It also checks against policy files: "deny Unsafe and Db in this module." 22 tests passing. The language is the long game. The library ships now.
+This is real output from liblux running against a test fixture that simulates malicious agent code. subprocess calls are Unsafe. os.environ access is Env. open() is Fs. sqlite3 is Db. eval() is Unsafe. The tool catches all of it through static AST analysis.
 -->
 
 ---
