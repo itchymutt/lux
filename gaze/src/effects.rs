@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::ast::{Expr, Function, Module};
@@ -99,11 +99,22 @@ impl fmt::Display for EffectError {
 
 /// Check all functions in a module for effect correctness.
 pub fn check_module(module: &Module) -> Vec<EffectError> {
+    // Build function effect table: name -> declared effects
+    let mut fn_effects: HashMap<String, HashSet<Effect>> = HashMap::new();
+    for item in &module.items {
+        if let crate::ast::Item::Function(func) = item {
+            fn_effects.insert(
+                func.name.clone(),
+                func.effects.iter().copied().collect(),
+            );
+        }
+    }
+
     let mut errors = Vec::new();
     for item in &module.items {
         match item {
             crate::ast::Item::Function(func) => {
-                check_function(func, &mut errors);
+                check_function(func, &fn_effects, &mut errors);
             }
             crate::ast::Item::Struct(_) | crate::ast::Item::Enum(_) => {
                 // Type definitions have no effects
@@ -113,13 +124,19 @@ pub fn check_module(module: &Module) -> Vec<EffectError> {
     errors
 }
 
-fn check_function(func: &Function, errors: &mut Vec<EffectError>) {
+fn check_function(
+    func: &Function,
+    fn_effects: &HashMap<String, HashSet<Effect>>,
+    errors: &mut Vec<EffectError>,
+) {
     let declared: HashSet<Effect> = func.effects.iter().copied().collect();
     for stmt in &func.body {
         match stmt {
-            crate::ast::Stmt::Expr(expr) => check_expr(expr, &declared, &func.name, errors),
+            crate::ast::Stmt::Expr(expr) => {
+                check_expr(expr, &declared, &func.name, fn_effects, errors);
+            }
             crate::ast::Stmt::Let(let_stmt) => {
-                check_expr(&let_stmt.value, &declared, &func.name, errors);
+                check_expr(&let_stmt.value, &declared, &func.name, fn_effects, errors);
             }
         }
     }
@@ -129,12 +146,13 @@ fn check_expr(
     expr: &Expr,
     declared: &HashSet<Effect>,
     func_name: &str,
+    fn_effects: &HashMap<String, HashSet<Effect>>,
     errors: &mut Vec<EffectError>,
 ) {
     match expr {
         Expr::Call { callee, args, span } => {
-            // Check the callee for builtin effects
             if let Expr::Ident(name, _) = callee.as_ref() {
+                // Check builtin effects
                 if let Some(required) = builtin_effects(name) {
                     for effect in required {
                         if !declared.contains(&effect) {
@@ -147,29 +165,43 @@ fn check_expr(
                         }
                     }
                 }
+                // Check user-defined function effects: caller must declare
+                // everything the callee declares
+                if let Some(callee_effects) = fn_effects.get(name.as_str()) {
+                    for effect in callee_effects {
+                        if !declared.contains(effect) {
+                            errors.push(EffectError {
+                                function_name: func_name.to_string(),
+                                missing_effect: *effect,
+                                caused_by: name.clone(),
+                                offset: span.start,
+                            });
+                        }
+                    }
+                }
             }
             // Recurse into callee and args
-            check_expr(callee, declared, func_name, errors);
+            check_expr(callee, declared, func_name, fn_effects, errors);
             for arg in args {
-                check_expr(arg, declared, func_name, errors);
+                check_expr(arg, declared, func_name, fn_effects, errors);
             }
         }
         Expr::BinOp { left, right, .. } => {
-            check_expr(left, declared, func_name, errors);
-            check_expr(right, declared, func_name, errors);
+            check_expr(left, declared, func_name, fn_effects, errors);
+            check_expr(right, declared, func_name, fn_effects, errors);
         }
         Expr::StructLit { fields, .. } => {
             for field in fields {
-                check_expr(&field.value, declared, func_name, errors);
+                check_expr(&field.value, declared, func_name, fn_effects, errors);
             }
         }
         Expr::FieldAccess { object, .. } => {
-            check_expr(object, declared, func_name, errors);
+            check_expr(object, declared, func_name, fn_effects, errors);
         }
         Expr::Match { subject, arms, .. } => {
-            check_expr(subject, declared, func_name, errors);
+            check_expr(subject, declared, func_name, fn_effects, errors);
             for arm in arms {
-                check_expr(&arm.body, declared, func_name, errors);
+                check_expr(&arm.body, declared, func_name, fn_effects, errors);
             }
         }
         Expr::StringLit(_, _)

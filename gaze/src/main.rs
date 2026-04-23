@@ -609,4 +609,93 @@ mod tests {
         let result = check("fn main() can Bogus {}", "<test>");
         assert!(result.is_err());
     }
+
+    // --- Effect propagation ---
+
+    #[test]
+    fn calling_effectful_function_requires_declaring_its_effects() {
+        check_fails(
+            r#"
+            fn fetch() can Net { 0 }
+            fn process() {
+                fetch()
+            }
+            fn main() { process() }
+            "#,
+            "requires `can Net`",
+        );
+    }
+
+    #[test]
+    fn calling_effectful_function_with_correct_declaration_passes() {
+        check_ok(r#"
+            fn fetch() can Net { 0 }
+            fn process() can Net {
+                fetch()
+            }
+            fn main() can Net { process() }
+        "#);
+    }
+
+    #[test]
+    fn transitive_effect_propagation() {
+        // a calls b calls c(can Net) — a must declare can Net
+        check_fails(
+            r#"
+            fn c() can Net { 0 }
+            fn b() can Net { c() }
+            fn a() { b() }
+            fn main() { a() }
+            "#,
+            "requires `can Net`",
+        );
+    }
+
+    #[test]
+    fn multiple_effects_propagate() {
+        check_fails(
+            r#"
+            fn risky() can Net, Unsafe { 0 }
+            fn caller() can Net {
+                risky()
+            }
+            fn main() can Net { caller() }
+            "#,
+            "requires `can Unsafe`",
+        );
+    }
+
+    #[test]
+    fn pure_calling_pure_is_fine() {
+        check_ok(r#"
+            fn add(a: Int, b: Int) -> Int { a + b }
+            fn double(x: Int) -> Int { add(x, x) }
+            fn main() can Console { print(double(5)) }
+        "#);
+    }
+
+    #[test]
+    fn effect_propagation_through_pipeline() {
+        check_fails(
+            r#"
+            fn fetch() can Net { 0 }
+            fn process() {
+                0 |> fetch
+            }
+            fn main() { process() }
+            "#,
+            "requires `can Net`",
+        );
+    }
+
+    #[test]
+    fn main_must_declare_effects_of_callees() {
+        check_fails(
+            r#"
+            fn greet() can Console { print("hi") }
+            fn main() { greet() }
+            "#,
+            "requires `can Console`",
+        );
+    }
 }
