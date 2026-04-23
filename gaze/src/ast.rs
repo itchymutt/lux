@@ -48,15 +48,36 @@ pub struct LetStmt {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+}
+
 #[derive(Debug)]
 pub enum Expr {
     StringLit(String, Span),
     IntLit(i64, Span),
     FloatLit(f64, Span),
+    BoolLit(bool, Span),
     Ident(String, Span),
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,
+        span: Span,
+    },
+    BinOp {
+        op: BinOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
         span: Span,
     },
 }
@@ -67,8 +88,10 @@ impl Expr {
             Expr::StringLit(_, s) => *s,
             Expr::IntLit(_, s) => *s,
             Expr::FloatLit(_, s) => *s,
+            Expr::BoolLit(_, s) => *s,
             Expr::Ident(_, s) => *s,
             Expr::Call { span, .. } => *span,
+            Expr::BinOp { span, .. } => *span,
         }
     }
 }

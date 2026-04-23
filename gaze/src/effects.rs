@@ -136,7 +136,15 @@ fn check_expr(
                 check_expr(arg, declared, func_name, errors);
             }
         }
-        Expr::StringLit(_, _) | Expr::IntLit(_, _) | Expr::FloatLit(_, _) | Expr::Ident(_, _) => {}
+        Expr::BinOp { left, right, .. } => {
+            check_expr(left, declared, func_name, errors);
+            check_expr(right, declared, func_name, errors);
+        }
+        Expr::StringLit(_, _)
+        | Expr::IntLit(_, _)
+        | Expr::FloatLit(_, _)
+        | Expr::BoolLit(_, _)
+        | Expr::Ident(_, _) => {}
     }
 }
 

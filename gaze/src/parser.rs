@@ -158,6 +158,78 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        self.parse_comparison()
+    }
+
+    // Precedence climbing: comparison < additive < multiplicative < call < primary
+    fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_additive()?;
+        loop {
+            let op = match &self.tokens[self.pos].kind {
+                TokenKind::EqEq => BinOp::Eq,
+                TokenKind::BangEq => BinOp::NotEq,
+                TokenKind::Lt => BinOp::Lt,
+                TokenKind::Gt => BinOp::Gt,
+                TokenKind::LtEq => BinOp::LtEq,
+                TokenKind::GtEq => BinOp::GtEq,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_additive()?;
+            let span = Span::new(left.span().start as usize, right.span().end as usize);
+            left = Expr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_additive(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_multiplicative()?;
+        loop {
+            let op = match &self.tokens[self.pos].kind {
+                TokenKind::Plus => BinOp::Add,
+                TokenKind::Minus => BinOp::Sub,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_multiplicative()?;
+            let span = Span::new(left.span().start as usize, right.span().end as usize);
+            left = Expr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_multiplicative(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_call()?;
+        loop {
+            let op = match &self.tokens[self.pos].kind {
+                TokenKind::Star => BinOp::Mul,
+                TokenKind::Slash => BinOp::Div,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_call()?;
+            let span = Span::new(left.span().start as usize, right.span().end as usize);
+            left = Expr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_call(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_primary()?;
 
         // Handle call syntax: expr(args...)
@@ -201,10 +273,24 @@ impl Parser {
                 self.advance();
                 Ok(Expr::FloatLit(n, span))
             }
+            TokenKind::Ident(name) if name == "true" => {
+                self.advance();
+                Ok(Expr::BoolLit(true, span))
+            }
+            TokenKind::Ident(name) if name == "false" => {
+                self.advance();
+                Ok(Expr::BoolLit(false, span))
+            }
             TokenKind::Ident(name) => {
                 let name = name.clone();
                 self.advance();
                 Ok(Expr::Ident(name, span))
+            }
+            TokenKind::LParen => {
+                self.advance();
+                let expr = self.parse_expr()?;
+                self.expect(&TokenKind::RParen)?;
+                Ok(expr)
             }
             _ => Err(self.error("expected expression")),
         }
