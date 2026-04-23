@@ -9,17 +9,39 @@ description = "See what your code does to the world before it runs."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
-authors = [{ name = "itchymutt" }]
+license-files = ["LICENSE"]
+authors = [{ name = "Roberta Carraro" }]
+keywords = ["effects", "static-analysis", "security", "ai-safety", "linting"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
     "Topic :: Security",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/itchymutt/lux"
+Repository = "https://github.com/itchymutt/lux"
+Documentation = "https://github.com/itchymutt/lux/tree/main/liblux"
+Issues = "https://github.com/itchymutt/lux/issues"
 
 [project.scripts]
 liblux = "liblux.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"

@@ -20,6 +20,8 @@ Lux draws from seven languages, taking specific ideas from each:
 | **Austral** | Capability-based I/O, linear types for resources, simplicity as constraint | Extreme verbosity of threading linear values |
 | **Hylo** | Mutable value semantics, subscripts/projections, parameter conventions | Unproven ergonomics for graph-shaped data |
 | **Julia** | Multiple dispatch expressiveness, type specialization | Dynamic typing, no effect tracking, GC |
+| **Go** | Structural simplicity, one way to do things, `gofmt`, the philosophy of constraint | No sum types, no generics (pre-1.18), error handling verbosity, too-easy allocation |
+| **Zig** | Allocation discipline, lazy error construction, pessimize-the-error-case principle, `comptime` | Manual memory management is too low-level for Lux's target audience |
 | **HCL** | The belief that a language should have an opinion about program structure | Domain-specificity (Lux is general-purpose) |
 
 See RESEARCH.md for the full competitive analysis.
@@ -467,7 +469,7 @@ Raw pointer operations require the `Unsafe` effect, which `lux audit` flags and 
 ## Compilation and Tooling
 
 - **`lux build`**: Compile to native code (LLVM backend, like Rust)
-- **`lux check`**: Type-check and effect-check without compiling
+- **`lux check`**: Type-check and effect-check without compiling. Target: sub-second for single-file changes. This is the number that matters for agent loops — agents operate in tight generate-check-fix cycles, and a slow check makes agents slow. (Reference: Zig 0.15 achieved sub-second incremental builds for libghostty-vt. Andrew Kelley: "the compiler is too damn slow, that's why we have bugs.")
 - **`lux audit`**: Print the effect manifest for a program (every function, its effects, its capabilities)
 - **`lux fmt`**: Format code (one canonical style, like `gofmt`, not configurable)
 - **`lux test`**: Run tests (tests are pure by default, effectful tests require explicit capability injection)
@@ -517,6 +519,8 @@ See DECISIONS.md for the full rationale on each.
 4. **Effect inference on private functions.** Probably yes for ergonomics, explicit on public functions mandatory.
 
 5. **Generics.** Monomorphization (fast execution, slow compilation) or boxing (fast compilation, runtime cost)?
+
+6. **Failure injection for testing.** Functions that `can Fail` have error paths. Those paths need testing. Zig's Tripwire library (Ghostty, 2026) injects failures at named points to force `errdefer` cleanup code to run — zero cost outside tests. Lux should have an equivalent: the ability to force a `Fail` at any `?` propagation point in a test, verifying that cleanup and error handling work correctly. This could be a test framework feature (`test.inject_fail(find_user, .db_query)`) or a language-level construct. The effect system knows which functions can fail and where — that's information a test harness can exploit.
 
 ## Influences
 

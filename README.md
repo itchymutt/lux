@@ -138,4 +138,6 @@ Next: liblux (the effect checker for Python/JS), then the tree-walk interpreter 
 
 ## License
 
-TBD
+MIT. The entire project — the language spec, the compiler, liblux, all of it.
+
+The vocabulary becomes a standard only if everyone can use it. See DECISIONS.md #10.

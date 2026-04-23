@@ -26,6 +26,23 @@ No. The combination of **static effect checking** + **fixed vocabulary** + **AI-
 
 ## What Matters Most
 
+### Go: The Agent Productivity Proof
+
+Mitchell Hashimoto, April 2026, on writing Go again: "its shocking how productive agents are out of the box at writing [good] Go code versus other languages I've used." He attributes this to `go doc`, `gopls`, one formatting style, and the structural simplicity of the language. The "shitty ergonomics" of Go's CLI tools — designed for humans who found them clunky — turn out to be "agent superpowers."
+
+This is the strongest external validation of Lux's thesis. Go's constraints weren't designed for agents, but they accidentally serve agents. One way to format code means agents don't waste tokens on style decisions. Rich introspection tools (`go doc`, `gopls`) give agents the context they need without reading source files. Structural simplicity means fewer ways to write the same thing, so agents produce more consistent output.
+
+Lux's constraints *are* designed for agents. The effect system, the fixed vocabulary, `lux audit`, `lux fmt` — these are the Go pattern made intentional. If Go accidentally became agent-friendly through constraint, a language designed from the start for agent-generated code should be dramatically more so.
+
+Hashimoto also describes Go + Zig as a productive pairing: Go for high-level concurrent code, Zig for zero-dependency cross-compiled performance-critical paths. This is the two-language pattern Lux competes against. Lux's bet is that one language with effect tracking, value semantics, and Perceus RC can cover both roles. If it can't — if the high-level orchestration code and the performance-critical inner loops still want different languages — the Go+Zig approach wins by default.
+
+### Zig: The Performance Proof
+
+Zig is being used for inference in production AI systems (K2.6). Hashimoto: "If you want absolute performance with exacting control over what your CPU executes and the way memory is laid out, Zig is the way." Zig's allocation discipline — no hidden allocations, explicit memory layout, `comptime` for zero-cost abstractions — is the performance standard Lux's native compilation (Phase 3) must eventually match.
+
+Lux doesn't need to beat Zig at memory layout control. That's not the target audience. But Lux does need to be fast enough that the Go+Zig two-language pattern isn't strictly necessary. If a Lux program with `can Unsafe` for the hot path can match "Go for the easy parts, Zig for the fast parts," the single-language story holds.
+
+
 ### Deno: The Runtime Proof
 
 Deno's permission system is the closest existing thing to Lux's effect vocabulary. Seven categories: read, write, net, env, run, ffi, sys. Enforced at process startup via CLI flags. Can be scoped to specific paths, domains, or variables.

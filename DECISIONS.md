@@ -232,3 +232,54 @@ let y = match thing {
 ```
 
 **Would revisit if:** Never. This falls out of the type system naturally.
+
+---
+
+## 9. Errors are lazy. The happy path pays nothing.
+
+**Chose:** `fail` creates a lightweight failure marker. Stack traces, error messages, and diagnostic context are constructed only when a `catch` block inspects the error.
+**Over:** Eager error construction (Rust's `Err(AppError::new(...))` allocates and formats immediately) or exception objects with pre-built stack traces (Java, Python).
+**Because:** The happy path is the common path. A function that `can Fail` succeeds 99%+ of the time. Allocating error context on every call — tracking undo state, formatting messages, capturing backtraces — pessimizes the success case to optimize the failure case. That's backwards.
+
+The principle comes from the Zig compiler's approach to error reporting: Zig doesn't store file/line/column info during parsing, because parsing succeeds most of the time and memory is speed (cache locality dominates). If an error occurs, Zig reparses from the beginning in a slow path that collects diagnostics. The error case is rare, so making it slower is free.
+
+Applied to Lux:
+
+```lux
+// fail creates a marker, not a formatted error.
+// No allocation, no string formatting, no stack capture.
+let user = find_user(id) ?? fail NotFound(id)
+
+// Only when someone catches and inspects does the error materialize.
+catch find_user(id) {
+    Ok(user) => user,
+    Err(e) => {
+        // e.message, e.trace, e.context are constructed HERE,
+        // not at the fail site.
+        log.error("lookup failed: {e}")
+        default_user()
+    },
+}
+```
+
+This means `fail` is cheap — a tagged union discriminant flip, not a heap allocation. The `?` propagation path is a branch and a return, not a copy of an error object. Only `catch` pays for diagnostics, and only if the handler asks for them.
+
+The compiler can use effect annotations to optimize further: a pure function (no `can Fail`) never needs error-handling scaffolding at all. A `can Fail` function needs the branch, but not the allocation.
+
+**Would revisit if:** Lazy error construction makes debugging significantly harder (e.g., the fail site's context is lost by the time `catch` runs). Mitigation: the compiler can optionally capture byte offsets (cheap) at `fail` sites and reconstruct full diagnostics on demand, the same way Zig reparses.
+
+---
+
+## 10. liblux is open source, permissively licensed.
+
+**Chose:** liblux (the effect checker library) is open source under a permissive license (MIT or Apache-2.0).
+**Over:** Proprietary licensing, copyleft (GPL), or open-core with a commercial effect checker.
+**Because:** liblux's value is proportional to its adoption. The vocabulary becomes a standard only if everyone can use it. A proprietary effect checker is an effect checker that agents won't use.
+
+Mitchell Hashimoto's "building block economy" observation (April 2026): agents prefer open and free software over closed and commercial. Independent research confirms this — models pick open alternatives under diverse circumstances. libghostty reached millions of daily users in two months because it was a freely available building block. Ghostty the application took eighteen months to reach one million.
+
+liblux is the building block. The vocabulary spreads through the building block. The building block spreads through openness. A permissively licensed liblux that any agent framework, CI pipeline, or IDE plugin can embed without legal review is the fastest path to making the ten-effect vocabulary the standard.
+
+The language can have a more nuanced licensing story later. The library cannot. This is a distribution decision, not an ideological one.
+
+**Would revisit if:** Never. A standard that requires a license is not a standard.

@@ -60,21 +60,53 @@ A tree-walk interpreter executes the AST directly. No compilation, no optimizati
 
 Implementation language: **Rust** (ironic but practical: fast, good parsing libraries, pattern matching for AST traversal, no GC to interfere with Lux's own memory model experiments).
 
-Deliverables:
+**Build methodology: sprint to demos.**
+
+Don't build the lexer, then the parser, then the type checker, then the interpreter as separate phases. Build the thinnest possible vertical slice that runs a real program, then widen. Each demo proves the design works for one more program. One or two demos per week. Do not let perfection be an enemy of progress. (This is Mitchell Hashimoto's approach from "Building Large Technical Projects": decompose into small problems where you can see results, solve each only enough to progress toward a demo, adopt your own software ASAP.)
+
+Demo sequence:
+
+1. **`hello.lux` runs.** Parse it, type-check it (trivial: one function, `can Console`), interpret it, see "Hello, world!" on screen. This proves: lexer, parser, basic type checker, basic interpreter, Console effect module. First demo.
+
+2. **`pure_logic.lux` runs.** Pure functions, pattern matching, pipelines, field projections. This proves: value semantics, function calls, match expressions, the pipeline operator. No effects needed beyond what's already built.
+
+3. **`lux check` works on all examples.** Type-check and effect-check without interpreting. This proves: the full effect system (inference, propagation, polymorphism, boundaries). This is the first tool that's useful independent of the interpreter.
+
+4. **`lux audit` works on all examples.** Print the effect manifest. Machine-readable JSON output. This proves: the audit tool, the manifest format. This is the second independently useful tool.
+
+5. **`weather.lux` runs.** Net, Fs, Env, Console, Fail — five effects in one program. This proves: multiple effect modules, `?` propagation, `catch`, capability access, string interpolation.
+
+6. **`sandbox.lux` runs.** Capability narrowing. This proves: `Net.restrict()`, `Fs.restrict_to()`, the capability model. The thesis demo.
+
+7. **`shortener/` runs.** The full URL shortener: 5 modules, 400+ lines, 7 effects. This proves: the module system, imports, the full effect system under real-world stress. If this runs correctly, the language design is validated.
+
+Deliverables (emerge from the demo sequence):
 - [ ] Lexer (source text -> tokens)
 - [ ] Parser (tokens -> AST)
 - [ ] Type checker (AST -> typed AST, including effect inference)
 - [ ] Interpreter (typed AST -> execution)
-- [ ] REPL (read-eval-print loop with effect tracking display)
-- [ ] Test suite: every example program runs correctly
 - [ ] `lux check`: type-check and effect-check without running
 - [ ] `lux audit`: print the effect manifest
+- [ ] REPL (read-eval-print loop with effect tracking display)
+- [ ] Test suite: every example program runs correctly
+
+**Implementation principles for Phase 1:**
+
+The interpreter should practice what the language preaches. Three rules, all from the same insight: don't pay for failure on the success path.
+
+1. **Store byte offsets, not line/column.** The AST records byte positions (one `u32` per node). Line and column numbers are reconstructed on demand by scanning the source when an error needs to be reported. Parsing succeeds most of the time. This is the Zig compiler's approach: reparses on error rather than tracking position metadata that's only needed when things go wrong.
+
+2. **`fail` is a tag, not an allocation.** The runtime representation of a failure is a discriminant flip on a tagged union, not a heap-allocated error object. Stack traces, formatted messages, and diagnostic context are constructed lazily when a `catch` block inspects the error. The `?` propagation path is a branch and a return.
+
+3. **Effect-aware optimization.** Pure functions (no effects) need zero error-handling scaffolding. `can Fail` functions need the branch but not the allocation. The interpreter can use effect annotations to skip work the type system proves unnecessary.
 
 **What we learn in Phase 1:**
 - Is the effect system ergonomic? Do programmers (and AI) find it natural?
 - Are the capability tokens too verbose? Not verbose enough?
 - Does value semantics work for real programs or does it force awkward patterns?
 - What's missing from the standard prelude?
+- Does lazy error construction make debugging harder in practice?
+- Does it feel right? (Tao principle 12: sit with it, use it, live with it.)
 
 ---
 

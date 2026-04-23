@@ -24,6 +24,8 @@ The vocabulary is the platform. The language is one implementation of the platfo
 
 This is the HCL pattern. HCL is a configuration language that became the standard for infrastructure-as-code. It succeeded not because everyone switched to HCL, but because the concepts it introduced (declarative infrastructure, plan-then-apply, human-readable-and-machine-parseable) became the standard way to think about infrastructure. Lux's effect vocabulary should do the same for code behavior.
 
+Mitchell Hashimoto's original definition of "as code" (March 2025): not "as programming" but "as a system of principles or rules." Codification — getting knowledge out of people's heads and into an inscribed system that can be shared, versioned, and iterated upon. The effect vocabulary is "effects as code" in this original sense. Ten words that codify what programs do to the world. The vocabulary is the inscribed system.
+
 **3. AI agents need a trust protocol. Effects are that protocol.**
 
 When an AI agent generates code, there's a trust problem. The agent wants to be useful (solve the problem using whatever capabilities are available). The orchestrator wants to be safe (don't execute code that does unexpected things). Without a shared language for describing behavior, these goals conflict.
@@ -31,6 +33,10 @@ When an AI agent generates code, there's a trust problem. The agent wants to be 
 Effect manifests resolve the conflict. The agent declares what the code will do. The orchestrator verifies the declaration matches policy. The type system guarantees the declaration is honest. Neither side needs to trust the other. The protocol enforces cooperation.
 
 This is stronger than runtime sandboxing (Docker containers, seccomp profiles, WASM capabilities). Runtime sandboxes detect violations after they happen. Effect manifests prevent violations before they happen. The code that would violate the policy doesn't compile.
+
+There's a deeper framing here. Mitchell Hashimoto's "Prompt Engineering vs. Blind Prompting" (April 2023) describes a rigorous methodology: define a demonstration set (expected input → expected output), test prompt candidates against it, measure accuracy. The key rule: decompose into a single problem, keep the output simple, normalize in your application.
+
+The effect manifest is this pattern applied to code generation. The manifest is the demonstration set — it declares what the code should do. The agent generates code (the completion). `lux check` verifies the completion matches the declaration (the accuracy test). If the code's actual effects don't match the declared effects, it doesn't compile. The accuracy is 100% or it fails. This is prompt engineering with a compiler as the test harness.
 
 The trust protocol has three components:
 - **The vocabulary:** ten effects that describe what code does
@@ -49,7 +55,11 @@ The specification is the reference. The examples are the proof. The Tao is the a
 
 ### Phase 2: The Library (next)
 
-Extract the effect checker as liblux: a Rust library that takes an AST (or annotations) and produces an effect manifest. Ship adapters for TypeScript, Python, and Rust.
+Ship the smallest useful thing first. Not "the effect checker for all languages." Ship `liblux` for Python — the analyzer that already exists, with a CLI (`liblux check agent.py`), a policy engine (`.luxpolicy` files), and JSON manifest output. That's the `libghostty-vt` equivalent: the smallest piece extracted from the larger vision, zero dependencies, immediately useful, widely portable.
+
+This is the lesson from libghostty's rollout (September 2025): the first library wasn't all of libghostty. It was `libghostty-vt` — VT parsing and terminal state, nothing else. Zero dependencies. C API. The smallest useful building block. It reached millions of users in two months because it solved one problem completely.
+
+Then `liblux` for JavaScript. Then the Rust core library. Then the protocol spec. Each ships independently. Each grows the vocabulary's adoption.
 
 liblux enters a positive-sum game. It doesn't compete with existing languages. It makes them better. Every language that adopts liblux grows the market for effect-aware programming, which makes Lux (the native implementation) more attractive.
 
@@ -97,6 +107,22 @@ This is the focal point. The thing that makes someone say "I need to learn this 
 ### Phase 5: The Language
 
 The full Lux compiler, standard library, package manager, and ecosystem. By this point, the vocabulary is established, the library is adopted, the protocol is standardized, and the killer app has proven the thesis. The language is the capstone, not the foundation.
+
+## The Building Block Economy
+
+Mitchell Hashimoto, April 2026: libghostty reached multiple millions of daily users in two months. Ghostty the application took eighteen months to reach one million daily macOS update checks. The building block outgrew the application by an order of magnitude in a fraction of the time.
+
+His explanation: the most effective way to build software and get massive adoption is no longer high-quality mainline applications but building blocks that enable others to build quantity over quality. The factory of today is agentic. Agents prefer to grab proven, well-documented components off the shelf and glue them together. The barrier to understanding component pieces well enough to assemble them is gone.
+
+This is the economic argument for liblux-first.
+
+**Lux the language is the application.** It requires adoption, learning, migration. It competes with every other language for mindshare. It's a high-quality mainline product that has to weigh every feature against every other feature.
+
+**liblux is the building block.** It's a pip-installable effect checker that agents can call. It doesn't require learning Lux. It doesn't require migration. It makes existing Python and JavaScript code safer. An agent can grab it off the shelf, run `liblux check agent.py`, and get an effect manifest. No adoption decision needed.
+
+The building block economy has a second implication: **liblux must be open. Unambiguously.** Hashimoto's observation, backed by independent research: models pick open and free software over closed and commercial. An effect checker that agents can't freely use is an effect checker that agents won't use. The vocabulary spreads through the building block. The building block spreads through openness.
+
+The language can have a more nuanced licensing story. The library cannot. liblux is open source, permissively licensed, or it doesn't become the standard.
 
 ## What We're Betting On
 

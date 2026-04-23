@@ -100,6 +100,22 @@ If models become reliable enough that the Lux compiler is unnecessary, the vocab
 
 Build for the vocabulary. The implementations are vehicles.
 
+### 11. The compiler is the harness.
+
+When an AI agent makes a mistake, the current practice is to write a rule in a markdown file so it doesn't make that mistake again. `AGENTS.md`: "don't make HTTP calls from pure functions." "Always run tests before committing." "Use the project's formatting style." These files grow. They're maintained by hand. They're ignored by new agents that haven't read them.
+
+A programming language can be the harness instead. In Lux, "don't make HTTP calls from pure functions" isn't a rule in a file. It's a compiler error. "Use the project's formatting style" isn't a linter config. It's `lux fmt`, one style, not configurable. "Declare what your code does" isn't a code review checklist. It's the type system.
+
+Every rule that lives in the compiler instead of a markdown file is a rule that never needs to be re-taught, never drifts, never gets ignored. The compiler is the harness that makes agents reliable. The more the language enforces, the less the human maintains.
+
+### 12. You have to feel it.
+
+Specifications, test suites, and benchmarks don't capture whether a language feels right. The feeling matters. The feeling is part of the requirements.
+
+When you write `can Net, Fail` and it reads like English, that's a feeling. When you see the `lux audit` output and immediately understand what every function in a program does, that's a feeling. When you read a stranger's Lux function at 2am during an incident and the signature tells you everything, that's a feeling.
+
+The interpreter isn't done when the tests pass. It's done when writing Lux feels like the obvious way to express what a program does. Sit with it. Use it. Live with it. If it doesn't feel right, it isn't right, regardless of what the specification says.
+
 ---
 
 ## What Lux Is Not

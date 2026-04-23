@@ -20,6 +20,10 @@ Lux bets that the next generation of programming languages will be designed for 
 
 **New priority: transparency.** Make every behavior visible. Trust nothing. Verify everything. (Lux)
 
+There's already evidence for this bet. Mitchell Hashimoto, returning to Go in 2026, found that agents are "shockingly productive" at writing good Go — better than in any other language he'd used. The reason: `go doc`, `gopls`, one formatting style, structural simplicity. Go's constraints, which humans found limiting, turn out to be agent superpowers. One way to do things means agents don't waste tokens on style decisions. Rich introspection tools give agents context without reading source. Predictable structure means consistent output.
+
+Go's constraints weren't designed for agents. They accidentally serve them. Lux's constraints are designed for agents from the start.
+
 A function in Lux that touches the network says `can Net`. A function that writes to disk says `can Fs`. A function that can fail says `can Fail`. A function that says nothing is pure: it takes values, returns values, and touches nothing else. The compiler enforces this. An AI agent cannot introduce hidden side effects because the type system won't allow it.
 
 This is not a new idea in academia. Haskell's IO monad, Koka's algebraic effects, and Austral's capability tokens all track what functions do to the world. What's new is the motivation: not theoretical purity, but practical safety in a world where the programmer is a machine.
@@ -53,6 +57,22 @@ Lux starts from the other end. What does the code look like on screen? How does 
 The `can` keyword exists because `! {Net, Db}` was ugly. `Fail` is an effect because `Result<User, AppError>` is ceremony. The `.field` shorthand exists because `|i| i.unit_price` is noise. Effects are modules because two concepts that map 1:1 should be one concept.
 
 These are design decisions, not compiler decisions. They came from looking at the code and saying "this doesn't feel right." That's the value a designer brings to language design: the conviction that how it feels to use is as important as what it can do.
+
+## The Workflow
+
+The most effective pattern for human-agent collaboration is already emerging: the human scaffolds, the agent fills in. Mitchell Hashimoto, building a non-trivial Ghostty feature with agents (October 2025), describes his most productive pattern: create a file with function signatures, parameter types, and TODO comments. Then ask the agent to complete it. The human defines the contract. The agent writes the implementation.
+
+Lux makes this pattern structural. The `can` clause is the scaffold. A human (or an architect agent) writes:
+
+```lux
+fn save_order(db: Db, order: Order) -> OrderId can Fail {
+    // TODO: validate, persist, return id
+}
+```
+
+The signature is the complete contract: takes a database capability and an order, returns an ID, can fail, touches nothing else. An agent fills in the body. The compiler verifies the body doesn't exceed the declared effects. The human reviews a function whose boundaries are already guaranteed.
+
+This is why "the signature is the contract" matters for agent-generated code: the signature is the scaffold that makes the agent's output trustworthy before you read a single line of implementation.
 
 ## The Principles
 
