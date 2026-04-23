@@ -10,6 +10,21 @@ pub struct Module {
 #[derive(Debug)]
 pub enum Item {
     Function(Function),
+    Struct(StructDef),
+}
+
+#[derive(Debug)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: Vec<FieldDef>,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct FieldDef {
+    pub name: String,
+    pub ty: TypeExpr,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -63,6 +78,13 @@ pub enum BinOp {
 }
 
 #[derive(Debug)]
+pub struct FieldInit {
+    pub name: String,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug)]
 pub enum Expr {
     StringLit(String, Span),
     IntLit(i64, Span),
@@ -80,6 +102,18 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
+    /// Struct construction: Point { x: 1, y: 2 }
+    StructLit {
+        name: String,
+        fields: Vec<FieldInit>,
+        span: Span,
+    },
+    /// Field access: p.x
+    FieldAccess {
+        object: Box<Expr>,
+        field: String,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -92,6 +126,8 @@ impl Expr {
             Expr::Ident(_, s) => *s,
             Expr::Call { span, .. } => *span,
             Expr::BinOp { span, .. } => *span,
+            Expr::StructLit { span, .. } => *span,
+            Expr::FieldAccess { span, .. } => *span,
         }
     }
 }

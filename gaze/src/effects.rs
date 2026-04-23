@@ -90,6 +90,9 @@ pub fn check_module(module: &Module) -> Vec<EffectError> {
             crate::ast::Item::Function(func) => {
                 check_function(func, &mut errors);
             }
+            crate::ast::Item::Struct(_) => {
+                // Struct definitions have no effects
+            }
         }
     }
     errors
@@ -139,6 +142,14 @@ fn check_expr(
         Expr::BinOp { left, right, .. } => {
             check_expr(left, declared, func_name, errors);
             check_expr(right, declared, func_name, errors);
+        }
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                check_expr(&field.value, declared, func_name, errors);
+            }
+        }
+        Expr::FieldAccess { object, .. } => {
+            check_expr(object, declared, func_name, errors);
         }
         Expr::StringLit(_, _)
         | Expr::IntLit(_, _)

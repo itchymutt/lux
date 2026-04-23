@@ -9,6 +9,10 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
+    Struct {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
     Unit,
 }
 
@@ -19,6 +23,13 @@ impl std::fmt::Display for Value {
             Value::Int(n) => write!(f, "{n}"),
             Value::Float(n) => write!(f, "{n}"),
             Value::Bool(b) => write!(f, "{b}"),
+            Value::Struct { name, fields } => {
+                let pairs: Vec<String> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{k}: {v}"))
+                    .collect();
+                write!(f, "{name} {{ {} }}", pairs.join(", "))
+            }
             Value::Unit => write!(f, "()"),
         }
     }
@@ -82,6 +93,7 @@ pub fn execute(module: &Module) -> Result<(), RuntimeError> {
         .iter()
         .filter_map(|item| match item {
             crate::ast::Item::Function(f) => Some((f.name.as_str(), f)),
+            crate::ast::Item::Struct(_) => None,
         })
         .collect();
 
@@ -198,6 +210,53 @@ fn eval_expr(
                 }
             }
         }
+
+        Expr::StructLit {
+            name,
+            fields,
+            span: _,
+        } => {
+            let mut field_values = HashMap::new();
+            for field in fields {
+                let val = eval_expr(&field.value, functions, env)?;
+                field_values.insert(field.name.clone(), val);
+            }
+            Ok(Value::Struct {
+                name: name.clone(),
+                fields: field_values,
+            })
+        }
+
+        Expr::FieldAccess {
+            object,
+            field,
+            span,
+        } => {
+            let obj = eval_expr(object, functions, env)?;
+            match &obj {
+                Value::Struct { fields, name } => {
+                    fields.get(field).cloned().ok_or_else(|| RuntimeError {
+                        message: format!("struct `{name}` has no field `{field}`"),
+                        offset: span.start,
+                    })
+                }
+                _ => Err(RuntimeError {
+                    message: format!("cannot access field `{field}` on {}", value_type_name(&obj)),
+                    offset: span.start,
+                }),
+            }
+        }
+    }
+}
+
+fn value_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::String(_) => "String",
+        Value::Int(_) => "Int",
+        Value::Float(_) => "Float",
+        Value::Bool(_) => "Bool",
+        Value::Struct { .. } => "Struct",
+        Value::Unit => "Unit",
     }
 }
 
