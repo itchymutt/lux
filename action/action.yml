@@ -1,0 +1,93 @@
+name: 'Gaze Effect Check'
+description: 'See what your code does to the world before it runs. Static effect analysis for Python.'
+author: 'Roberta Carraro'
+
+inputs:
+  path:
+    description: 'File or directory to scan'
+    required: true
+  deny:
+    description: 'Comma-separated effects to deny (e.g. "Unsafe,Db")'
+    required: false
+    default: ''
+  policy:
+    description: 'Path to a .gazepolicy file'
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.12'
+
+outputs:
+  effects:
+    description: 'JSON array of effects found'
+    value: ${{ steps.scan.outputs.effects }}
+  passed:
+    description: 'Whether the check passed (true/false)'
+    value: ${{ steps.scan.outputs.passed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install libgaze
+      shell: bash
+      run: pip install libgaze
+
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+
+        PATH_INPUT="${{ inputs.path }}"
+        DENY_INPUT="${{ inputs.deny }}"
+        POLICY_INPUT="${{ inputs.policy }}"
+
+        # Collect all Python files
+        if [ -d "$PATH_INPUT" ]; then
+          FILES=$(find "$PATH_INPUT" -name "*.py" -not -path "*/node_modules/*" -not -path "*/.venv/*" -not -path "*/venv/*" | sort)
+        else
+          FILES="$PATH_INPUT"
+        fi
+
+        FAILED=0
+        ALL_EFFECTS="[]"
+
+        for f in $FILES; do
+          echo "::group::$f"
+
+          if [ -n "$POLICY_INPUT" ]; then
+            libgaze policy "$f" -p "$POLICY_INPUT"
+            if [ $? -ne 0 ]; then FAILED=1; fi
+          elif [ -n "$DENY_INPUT" ]; then
+            libgaze check "$f" --deny "$DENY_INPUT"
+            if [ $? -ne 0 ]; then FAILED=1; fi
+          else
+            libgaze check "$f"
+          fi
+
+          # Collect JSON for output
+          EFFECTS_JSON=$(libgaze check "$f" --json 2>/dev/null)
+          if [ $? -eq 0 ]; then
+            FILE_EFFECTS=$(echo "$EFFECTS_JSON" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['effects']))" 2>/dev/null || echo "[]")
+          fi
+
+          echo "::endgroup::"
+        done
+
+        if [ $FAILED -eq 1 ]; then
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+          exit 1
+        else
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+        fi
+
+branding:
+  icon: 'eye'
+  color: 'blue'
