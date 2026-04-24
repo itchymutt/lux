@@ -1,0 +1,7 @@
+{
+    "deny": ["Unsafe"],
+    "functions": {
+        "run_code_unsafe": { "deny": ["Unsafe", "Net", "Fs"] },
+        "_run": { "allow": [] }
+    }
+}
