@@ -24,3 +24,6 @@ Thumbs.db
 
 # Environment
 .env
+
+# Internal notes (strategy, research, personas, deck)
+notes/
