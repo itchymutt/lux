@@ -85,14 +85,15 @@ const RAND_MODULES = [
 ];
 
 const ASYNC_MODULES = [
-  "node:worker_threads", "node:cluster", "node:child_process",
-  "worker_threads", "cluster", "child_process",
+  "node:worker_threads", "node:cluster",
+  "worker_threads", "cluster",
   "p-queue", "p-limit", "bull", "bullmq",
 ];
 
 const UNSAFE_MODULES = [
   "node:vm", "vm",
   "node:ffi", "ffi-napi", "ref-napi",
+  "node:child_process", "child_process",
 ];
 
 export const MODULE_EFFECTS: Map<string, Effect> = new Map();

@@ -3,7 +3,7 @@
 See what your code does to the world before it runs.
 
 ```
-$ libgaze check server.ts
+$ libgaze-ts check server.ts
 
 server.ts  can Env, Fs, Net
 
@@ -22,23 +22,63 @@ libgaze-ts is a static effect analyzer for TypeScript. Same ten effects as [libg
 ## Install
 
 ```bash
-npm install libgaze
+npm install libgaze-ts
 ```
 
 ## Usage
 
+### CLI
+
 ```bash
 # Check a file
-libgaze check myfile.ts
+libgaze-ts check myfile.ts
 
 # JSON output
-libgaze check myfile.ts --json
+libgaze-ts check myfile.ts --json
 
 # Scan a directory
-libgaze scan src/
+libgaze-ts scan src/
 
 # Fail if denied effects are found (CI gate)
-libgaze scan src/ --deny Unsafe,Db
+libgaze-ts scan src/ --deny Unsafe,Db
+
+# Check against a policy file
+libgaze-ts policy myfile.ts -p .gazepolicy
+```
+
+### Policy files
+
+A `.gazepolicy` file declares which effects are allowed or denied:
+
+```json
+{
+    "deny": ["Unsafe", "Db"],
+    "functions": {
+        "transform": { "allow": [] }
+    }
+}
+```
+
+`allow` means only these effects are permitted (anything else is a violation). `deny` means these effects are forbidden. They're mutually exclusive at each level. Function-level policies override the module-level policy.
+
+### Programmatic API
+
+```typescript
+import { analyzeSource, analyzeFilePath, Effect } from "libgaze-ts";
+
+// Analyze a source string
+const result = analyzeSource(`
+  function greet() { console.log("hello"); }
+`);
+console.log(result.allEffects); // Set { "Console" }
+
+// Analyze a file
+const fileResult = analyzeFilePath("server.ts");
+for (const fn of fileResult.functions) {
+  if (!fn.pure) {
+    console.log(`${fn.name}: ${[...fn.effects].join(", ")}`);
+  }
+}
 ```
 
 ## The ten effects
@@ -53,8 +93,8 @@ libgaze scan src/ --deny Unsafe,Db
 | `Time` | Clock or sleep (setTimeout, Date.now, performance.now) |
 | `Rand` | Randomness (Math.random, crypto.randomUUID) |
 | `Async` | Concurrency (worker_threads, child_process) |
-| `Unsafe` | eval, new Function, vm module |
-| `Fail` | Can exit (process.exit) |
+| `Unsafe` | Subprocess, exec, eval, FFI, deserialization |
+| `Fail` | Can fail (sys.exit, process.exit) |
 
 ## Benchmark
 
@@ -69,8 +109,8 @@ F1         100.0%
 Scale scan: 1,607 files and 2,782 functions across MCP Servers, Vercel AI SDK, and OpenAI Agents JS. Zero parse failures.
 
 ```bash
-npx tsc && node dist/bench/run.js        # labeled benchmark
-npx tsc && node dist/bench/scan_repos.js  # scale scan
+npm run build && node dist/bench/run.js        # labeled benchmark
+npm run build && node dist/bench/scan_repos.js  # scale scan
 ```
 
 ## How it works
@@ -80,7 +120,7 @@ Same architecture as libgaze (Python):
 1. **AST walk.** Detect effects from known functions (`fetch`, `readFileSync`, `console.log`) and module imports (`openai`, `pg`, `node:fs`).
 2. **Call graph propagation.** Trace `this.method()`, `ClassName.method()`, and bare `function()` calls within the same file. Iterate until stable.
 
-Uses [ts-morph](https://ts-morph.com/) for TypeScript parsing.
+Uses [oxc-parser](https://oxc.rs/) for TypeScript parsing (~2.4MB installed, vs ~50MB for ts-morph).
 
 ## Limitations
 

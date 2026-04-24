@@ -1,32 +1,53 @@
 {
-  "name": "libgaze",
+  "name": "libgaze-ts",
   "version": "0.1.0",
   "description": "See what your code does to the world before it runs. Static effect analysis for TypeScript.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
   "bin": {
-    "libgaze": "dist/cli.js"
+    "libgaze-ts": "dist/src/cli.js"
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --test dist/bench/run.js",
+    "test": "node --test test/run.js",
     "bench": "node dist/bench/run.js"
   },
   "dependencies": {
-    "ts-morph": "^25.0.0"
+    "oxc-parser": "^0.72.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "typescript": "^5.8.0"
   },
   "files": [
-    "dist"
+    "dist/src",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/itchymutt/gaze",
     "directory": "libgaze-ts"
   },
-  "license": "MIT"
+  "homepage": "https://github.com/itchymutt/gaze/tree/main/libgaze-ts",
+  "bugs": "https://github.com/itchymutt/gaze/issues",
+  "license": "MIT",
+  "author": "Roberta Carraro",
+  "keywords": [
+    "effects",
+    "static-analysis",
+    "typescript",
+    "security",
+    "ai-safety",
+    "linting"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
 }
