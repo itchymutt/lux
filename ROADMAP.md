@@ -19,26 +19,29 @@ A tree-walk interpreter that enforces effects at compile time.
 - [x] `gaze run`, `gaze check`, `gaze audit`, `gaze fmt`
 - [x] Error messages with source context and fix suggestions
 
-### libgaze (Python, ~510 lines, 22 tests + 101 benchmark)
+### libgaze (Python, ~510 lines, 78 tests + 101 benchmark)
 
-Static effect analyzer for Python. Two-pass: AST walk + call graph propagation.
+Static effect analyzer for Python. Two-pass: AST walk + call graph propagation. Published on [PyPI](https://pypi.org/project/libgaze/).
 
 - [x] Detect effects from stdlib, builtins, and 60+ third-party libraries
 - [x] Intra-module call graph propagation (self.method(), ClassName.method())
 - [x] CLI: `libgaze check`, `libgaze scan`, `libgaze policy`
 - [x] JSON output for CI pipelines
-- [x] Policy files (.gazepolicy) with deny lists and per-function rules
+- [x] Policy files (.gazepolicy) with allow/deny lists and per-function rules
+- [x] Unit tests: CLI exit codes, error cases, API surface, policy system (78 tests)
 - [x] Labeled benchmark: 101 functions, 100% precision/recall
 - [x] Scale scan: 12,511 functions across CrewAI, LangChain, AutoGPT
 
-### libgaze-ts (TypeScript, ~550 lines, 54 benchmark)
+### libgaze-ts (TypeScript, ~750 lines, 64 tests + 54 benchmark)
 
-Static effect analyzer for TypeScript. Same vocabulary, same architecture.
+Static effect analyzer for TypeScript. Same vocabulary, same architecture, full feature parity with Python.
 
 - [x] Detect effects from Node.js stdlib and 40+ npm packages
 - [x] Import resolution (named, default, namespace, require())
 - [x] Intra-module call graph propagation
-- [x] CLI: check, scan, --deny, --json
+- [x] CLI: check, scan, policy, --deny, --json
+- [x] Policy files (.gazepolicy) with allow/deny lists and per-function rules
+- [x] Unit tests: API surface, CLI commands, policy system (64 tests)
 - [x] Labeled benchmark: 54 functions, 100% precision/recall
 - [x] Scale scan: 2,782 functions across MCP Servers, Vercel AI SDK, OpenAI Agents JS
 
@@ -50,9 +53,9 @@ Static effect analyzer for TypeScript. Same vocabulary, same architecture.
 
 ### Ship (highest priority)
 
-- [ ] Publish libgaze to PyPI (`pip install libgaze`)
-- [ ] Publish libgaze-ts to npm (`npx libgaze check file.ts`)
-- [ ] Make the repo public
+- [x] Publish libgaze to PyPI (`pip install libgaze`)
+- [ ] Publish libgaze-ts to npm (`npm install libgaze-ts`)
+- [x] Make the repo public
 - [ ] Write the blog post (the CrewAI finding is the lede)
 - [ ] Publish the GitHub Action to the marketplace
 

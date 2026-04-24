@@ -53,5 +53,5 @@ Gate PRs on what the code does to the world.
 | `Time` | Reads the clock or sleeps |
 | `Rand` | Generates random numbers |
 | `Async` | Spawns concurrent tasks |
-| `Unsafe` | Subprocess, exec, eval, FFI |
-| `Fail` | Can fail (sys.exit, etc.) |
+| `Unsafe` | Subprocess, exec, eval, FFI, deserialization |
+| `Fail` | Can fail (sys.exit, process.exit) |

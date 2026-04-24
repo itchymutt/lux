@@ -21,7 +21,7 @@ inputs:
 
 outputs:
   effects:
-    description: 'JSON array of effects found'
+    description: 'JSON array of all effects found across scanned files'
     value: ${{ steps.scan.outputs.effects }}
   passed:
     description: 'Whether the check passed (true/false)'
@@ -42,44 +42,61 @@ runs:
     - name: Scan
       id: scan
       shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_DENY: ${{ inputs.deny }}
+        INPUT_POLICY: ${{ inputs.policy }}
       run: |
         set +e
 
-        PATH_INPUT="${{ inputs.path }}"
-        DENY_INPUT="${{ inputs.deny }}"
-        POLICY_INPUT="${{ inputs.policy }}"
-
-        # Collect all Python files
-        if [ -d "$PATH_INPUT" ]; then
-          FILES=$(find "$PATH_INPUT" -name "*.py" -not -path "*/node_modules/*" -not -path "*/.venv/*" -not -path "*/venv/*" | sort)
+        # Collect all Python files (handles spaces in filenames)
+        if [ -d "$INPUT_PATH" ]; then
+          FILES=()
+          while IFS= read -r -d '' f; do
+            FILES+=("$f")
+          done < <(find "$INPUT_PATH" -name "*.py" -not -path "*/node_modules/*" -not -path "*/.venv/*" -not -path "*/venv/*" -print0 | sort -z)
         else
-          FILES="$PATH_INPUT"
+          FILES=("$INPUT_PATH")
         fi
 
         FAILED=0
-        ALL_EFFECTS="[]"
+        EFFECTS_FILE=$(mktemp)
+        echo "[]" > "$EFFECTS_FILE"
 
-        for f in $FILES; do
+        for f in "${FILES[@]}"; do
           echo "::group::$f"
 
-          if [ -n "$POLICY_INPUT" ]; then
-            libgaze policy "$f" -p "$POLICY_INPUT"
+          # Get JSON output (single analysis per file)
+          FILE_JSON=$(libgaze check "$f" --json 2>/dev/null)
+
+          if [ -n "$INPUT_POLICY" ]; then
+            libgaze policy "$f" -p "$INPUT_POLICY"
             if [ $? -ne 0 ]; then FAILED=1; fi
-          elif [ -n "$DENY_INPUT" ]; then
-            libgaze check "$f" --deny "$DENY_INPUT"
+          elif [ -n "$INPUT_DENY" ]; then
+            libgaze check "$f" --deny "$INPUT_DENY"
             if [ $? -ne 0 ]; then FAILED=1; fi
           else
             libgaze check "$f"
           fi
 
-          # Collect JSON for output
-          EFFECTS_JSON=$(libgaze check "$f" --json 2>/dev/null)
-          if [ $? -eq 0 ]; then
-            FILE_EFFECTS=$(echo "$EFFECTS_JSON" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['effects']))" 2>/dev/null || echo "[]")
+          # Merge effects into collection
+          if [ -n "$FILE_JSON" ]; then
+            python3 -c "
+        import json, sys
+        existing = json.load(open('$EFFECTS_FILE'))
+        new = json.loads(sys.stdin.read()).get('effects', [])
+        merged = sorted(set(existing + new))
+        json.dump(merged, open('$EFFECTS_FILE', 'w'))
+        " <<< "$FILE_JSON" 2>/dev/null
           fi
 
           echo "::endgroup::"
         done
+
+        # Write outputs
+        ALL_EFFECTS=$(cat "$EFFECTS_FILE")
+        rm -f "$EFFECTS_FILE"
+        echo "effects=$ALL_EFFECTS" >> "$GITHUB_OUTPUT"
 
         if [ $FAILED -eq 1 ]; then
           echo "passed=false" >> "$GITHUB_OUTPUT"

@@ -10,6 +10,7 @@ __pycache__/
 *.egg
 dist/
 .pytest_cache/
+.ruff_cache/
 
 # Editor
 .vscode/
@@ -29,3 +30,7 @@ Thumbs.db
 notes/
 node_modules/
 decks/
+
+# Root-level npm artifacts (for ESLint only, not part of the project)
+/package.json
+/package-lock.json

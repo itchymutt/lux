@@ -14,15 +14,15 @@ Ten effects. Fixed vocabulary. Not extensible.
 | `Time` | Reads the clock or sleeps |
 | `Rand` | Generates random numbers |
 | `Async` | Spawns concurrent tasks |
-| `Unsafe` | Subprocess, exec, eval, FFI |
-| `Fail` | Can fail |
+| `Unsafe` | Subprocess, exec, eval, FFI, deserialization |
+| `Fail` | Can fail (sys.exit, process.exit) |
 
 ## Three implementations, one vocabulary
 
 | Component | What it does | Language |
 |---|---|---|
 | **gaze** | Compiler. Effects enforced at compile time. | Rust |
-| **libgaze** | Static analyzer for Python. Effects detected and reported. | Python |
+| **[libgaze](https://pypi.org/project/libgaze/)** | Static analyzer for Python. Effects detected and reported. | Python |
 | **libgaze-ts** | Static analyzer for TypeScript. Same vocabulary, different AST. | TypeScript |
 
 The vocabulary is the contribution. The implementations prove it works.
@@ -32,24 +32,21 @@ The vocabulary is the contribution. The implementations prove it works.
 ### Analyze Python code
 
 ```bash
-cd libgaze
-pip install -e .
+pip install libgaze
 libgaze check your_file.py
 ```
 
 ### Analyze TypeScript code
 
 ```bash
-cd libgaze-ts
-npm install && npx tsc
+cd libgaze-ts && npm install && npm run build
 node dist/src/cli.js check your_file.ts
 ```
 
-### Run the Gaze language
+### Run the Gaze language (requires Rust)
 
 ```bash
-cd gaze
-cargo install --path .
+cargo install --path gaze
 gaze run examples/hello.gaze
 ```
 
@@ -58,12 +55,18 @@ gaze run examples/hello.gaze
 ```
 $ libgaze check code_interpreter.py
 
-_run:194  can Fs, Net, Unsafe
-    calls run_code_unsafe (line 347)
-    calls run_code_safety (line 281)
-run_code_unsafe:347  can Unsafe
-    os.system(f"pip install {library}")
-    exec(code, {}, exec_locals)
+code_interpreter.py  can Fs, Net, Unsafe
+
+  restricted_import:75  can Unsafe
+    99 | return __import__(name, custom_globals, custom_locals, fromlist or (), level)
+  safe_builtins:102  (pure)
+  exec:119  can Unsafe
+    126 | exec(code, {"__builtins__": SandboxPython.safe_builtins()}, locals)
+  _run:194  can Fs, Net, Unsafe
+    347 | os.system(f"pip install {library}")
+    281 | exec(code, {}, exec_locals)
+
+2/13 functions are pure.
 ```
 
 Two-pass analysis: walk the AST to detect direct effects, then propagate through the intra-module call graph. If `_run()` calls `self.run_code_unsafe()`, it inherits `Unsafe`.
@@ -79,6 +82,24 @@ Scanned 3,211 files and 15,293 functions across seven real repos (CrewAI, LangCh
 | Pure | 66% | 78% |
 
 Labeled benchmarks: 101 Python functions, 54 TypeScript functions. 100% precision, 100% recall on both.
+
+## Policy files
+
+Both analyzers support `.gazepolicy` files for fine-grained control:
+
+```json
+{
+    "deny": ["Unsafe", "Db"],
+    "functions": {
+        "transform": { "allow": [] }
+    }
+}
+```
+
+```bash
+libgaze policy myfile.py -p .gazepolicy
+libgaze-ts policy myfile.ts -p .gazepolicy
+```
 
 ## CI gate
 
