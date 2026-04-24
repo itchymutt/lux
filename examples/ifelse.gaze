@@ -1,0 +1,23 @@
+fn abs(x: Int) -> Int {
+    if x < 0 { 0 - x } else { x }
+}
+
+fn classify(score: Int) -> String {
+    if score > 90 {
+        "excellent"
+    } else {
+        if score > 70 {
+            "good"
+        } else {
+            "needs work"
+        }
+    }
+}
+
+fn main() can Console {
+    print(abs(5))
+    print(abs(0 - 3))
+    print(classify(95))
+    print(classify(80))
+    print(classify(50))
+}

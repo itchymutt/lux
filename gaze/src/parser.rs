@@ -459,10 +459,38 @@ impl Parser {
         }
     }
 
+    fn parse_if(&mut self) -> Result<Expr, ParseError> {
+        let start = self.current_span();
+        self.expect(&TokenKind::If)?;
+        let condition = self.parse_expr()?;
+        self.expect(&TokenKind::LBrace)?;
+        let then_body = self.parse_body()?;
+        self.expect(&TokenKind::RBrace)?;
+
+        let else_body = if self.check(&TokenKind::Else) {
+            self.advance();
+            self.expect(&TokenKind::LBrace)?;
+            let body = self.parse_body()?;
+            self.expect(&TokenKind::RBrace)?;
+            Some(body)
+        } else {
+            None
+        };
+
+        let end = self.current_span();
+        Ok(Expr::If {
+            condition: Box::new(condition),
+            then_body,
+            else_body,
+            span: Span::new(start.start as usize, end.end as usize),
+        })
+    }
+
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         let span = self.current_span();
         match &self.tokens[self.pos].kind {
             TokenKind::Match => return self.parse_match(),
+            TokenKind::If => return self.parse_if(),
             TokenKind::StringLit(s) => {
                 let s = s.clone();
                 self.advance();

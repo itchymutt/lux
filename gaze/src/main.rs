@@ -698,4 +698,73 @@ mod tests {
             "requires `can Console`",
         );
     }
+
+    // --- If/else ---
+
+    #[test]
+    fn if_else_expression() {
+        run_ok(r#"
+            fn main() can Console {
+                let x = if 3 > 2 { "yes" } else { "no" }
+                print(x)
+            }
+        "#);
+    }
+
+    #[test]
+    fn if_without_else() {
+        run_ok(r#"
+            fn main() can Console {
+                if true { print("hello") }
+            }
+        "#);
+    }
+
+    #[test]
+    fn nested_if_else() {
+        run_ok(r#"
+            fn classify(n: Int) -> String {
+                if n > 90 { "great" } else { if n > 70 { "good" } else { "ok" } }
+            }
+            fn main() can Console {
+                print(classify(95))
+                print(classify(80))
+                print(classify(50))
+            }
+        "#);
+    }
+
+    #[test]
+    fn if_condition_must_be_bool() {
+        run_fails(
+            r#"fn main() can Console { if 42 { print("bad") } }"#,
+            "must be Bool",
+        );
+    }
+
+    #[test]
+    fn effect_check_in_if_body() {
+        check_fails(
+            r#"
+            fn sneaky() {
+                if true { print("gotcha") }
+            }
+            fn main() { sneaky() }
+            "#,
+            "requires `can Console`",
+        );
+    }
+
+    #[test]
+    fn effect_check_in_else_body() {
+        check_fails(
+            r#"
+            fn sneaky() {
+                if false { 0 } else { print("gotcha") }
+            }
+            fn main() { sneaky() }
+            "#,
+            "requires `can Console`",
+        );
+    }
 }

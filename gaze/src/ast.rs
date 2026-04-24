@@ -135,6 +135,13 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    /// If/else expression
+    If {
+        condition: Box<Expr>,
+        then_body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
+        span: Span,
+    },
 }
 
 #[derive(Debug)]
@@ -173,6 +180,7 @@ impl Expr {
             Expr::StructLit { span, .. } => *span,
             Expr::FieldAccess { span, .. } => *span,
             Expr::Match { span, .. } => *span,
+            Expr::If { span, .. } => *span,
         }
     }
 }

@@ -204,6 +204,23 @@ fn check_expr(
                 check_expr(&arm.body, declared, func_name, fn_effects, errors);
             }
         }
+        Expr::If { condition, then_body, else_body, .. } => {
+            check_expr(condition, declared, func_name, fn_effects, errors);
+            for stmt in then_body {
+                match stmt {
+                    crate::ast::Stmt::Expr(e) => check_expr(e, declared, func_name, fn_effects, errors),
+                    crate::ast::Stmt::Let(l) => check_expr(&l.value, declared, func_name, fn_effects, errors),
+                }
+            }
+            if let Some(else_stmts) = else_body {
+                for stmt in else_stmts {
+                    match stmt {
+                        crate::ast::Stmt::Expr(e) => check_expr(e, declared, func_name, fn_effects, errors),
+                        crate::ast::Stmt::Let(l) => check_expr(&l.value, declared, func_name, fn_effects, errors),
+                    }
+                }
+            }
+        }
         Expr::StringLit(_, _)
         | Expr::IntLit(_, _)
         | Expr::FloatLit(_, _)

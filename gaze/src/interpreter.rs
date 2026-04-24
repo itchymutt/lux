@@ -307,6 +307,38 @@ fn eval_expr(
             }
         }
 
+        Expr::If {
+            condition,
+            then_body,
+            else_body,
+            span: _,
+        } => {
+            let cond = eval_expr(condition, functions, variants, env)?;
+            let is_true = match &cond {
+                Value::Bool(b) => *b,
+                _ => {
+                    return Err(RuntimeError {
+                        message: format!("if condition must be Bool, got {}", value_type_name(&cond)),
+                        offset: condition.span().start,
+                    });
+                }
+            };
+
+            let stmts = if is_true {
+                then_body
+            } else if let Some(else_stmts) = else_body {
+                else_stmts
+            } else {
+                return Ok(Value::Unit);
+            };
+
+            let mut result = Value::Unit;
+            for stmt in stmts {
+                result = exec_stmt(stmt, functions, variants, env)?;
+            }
+            Ok(result)
+        }
+
         Expr::Match {
             subject,
             arms,
