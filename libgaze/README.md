@@ -61,6 +61,8 @@ A `.gazepolicy` file declares which effects are allowed or denied:
 }
 ```
 
+`allow` means only these effects are permitted (anything else is a violation). `deny` means these effects are forbidden. They're mutually exclusive at each level. Function-level policies override the module-level policy.
+
 ## The ten effects
 
 | Effect | What it means |

@@ -97,7 +97,15 @@ def run_check(args: argparse.Namespace) -> None:
         print(f"error: {args.file} not found", file=sys.stderr)
         sys.exit(1)
 
-    result = analyze_file(args.file)
+    if args.file.is_dir():
+        print(f"error: {args.file} is a directory (use 'libgaze scan' for directories)", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        result = analyze_file(args.file)
+    except SyntaxError as e:
+        print(f"error: {args.file} has a syntax error: {e.msg} (line {e.lineno})", file=sys.stderr)
+        sys.exit(1)
 
     if args.json_output:
         print(json.dumps(to_json(result), indent=2))
@@ -190,8 +198,21 @@ def run_policy(args: argparse.Namespace) -> None:
         print(f"error: {args.policy} not found", file=sys.stderr)
         sys.exit(1)
 
-    result = analyze_file(args.file)
-    policy = load_policy(args.policy)
+    try:
+        result = analyze_file(args.file)
+    except SyntaxError as e:
+        print(f"error: {args.file} has a syntax error: {e.msg} (line {e.lineno})", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        policy = load_policy(args.policy)
+    except json.JSONDecodeError as e:
+        print(f"error: {args.policy} is not valid JSON: {e.msg} (line {e.lineno})", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"error: {args.policy}: {e}", file=sys.stderr)
+        sys.exit(1)
+
     violations = check_policy(result, policy)
 
     if args.json_output:
@@ -223,7 +244,11 @@ def run_policy(args: argparse.Namespace) -> None:
 def print_report(result: ModuleEffects, quiet: bool = False) -> None:
     effects = result.all_effects
     if not effects:
-        print(f"{result.path}  (pure)")
+        total = len(result.functions)
+        if total > 0:
+            print(f"{result.path}  (pure, {total} functions)")
+        else:
+            print(f"{result.path}  (pure)")
         return
 
     effect_str = ", ".join(sorted(str(e) for e in effects))
