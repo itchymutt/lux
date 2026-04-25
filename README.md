@@ -15,13 +15,13 @@ Ten effects. Fixed vocabulary. Not extensible.
 | `Rand` | Generates random numbers |
 | `Async` | Spawns concurrent tasks |
 | `Unsafe` | Subprocess, exec, eval, FFI, deserialization |
-| `Fail` | Can fail (sys.exit, process.exit) |
+| `Fail` | Can fail (exit, panic, unhandled exceptions) |
 
 ## Three implementations, one vocabulary
 
 | Component | What it does | Language |
 |---|---|---|
-| **gaze** | Compiler. Effects enforced at compile time. | Rust |
+| **gaze** | Interpreter. Effects enforced before execution. | Rust |
 | **[libgaze](https://pypi.org/project/libgaze/)** | Static analyzer for Python. Effects detected and reported. | Python |
 | **[libgaze-ts](https://www.npmjs.com/package/libgaze-ts)** | Static analyzer for TypeScript. Same vocabulary, different AST. | TypeScript |
 
@@ -39,7 +39,7 @@ libgaze check your_file.py
 ### Analyze TypeScript code
 
 ```bash
-npm install -g libgaze-ts
+npm install libgaze-ts
 libgaze-ts check your_file.ts
 ```
 
@@ -73,7 +73,7 @@ Two-pass analysis: walk the AST to detect direct effects, then propagate through
 
 ## Scale
 
-Scanned 3,211 files and 15,293 functions across seven real repos (CrewAI, LangChain, AutoGPT, MCP Servers, Vercel AI SDK, OpenAI Agents JS). The vocabulary didn't change between Python and TypeScript. Not one effect was added, removed, or renamed.
+Scanned 3,211 files and 15,293 functions across six projects (CrewAI, LangChain, AutoGPT, MCP Servers, Vercel AI SDK, OpenAI Agents JS). The vocabulary didn't change between Python and TypeScript. Not one effect was added, removed, or renamed.
 
 | | Python | TypeScript |
 |---|---|---|
@@ -110,6 +110,8 @@ libgaze-ts policy myfile.ts -p .gazepolicy
     deny: Unsafe
 ```
 
+The GitHub Action scans Python files. For TypeScript, use `libgaze-ts` directly in your CI script.
+
 ## The language
 
 ```gaze
@@ -124,7 +126,7 @@ fn transform(data: Config) -> Result {
 }
 ```
 
-The language is the proof that the vocabulary holds together as a complete programming model. 75 tests. See `gaze/` and `TUTORIAL.md`.
+The language is the proof that the vocabulary holds together as a complete programming model. 75 tests. See `gaze/` and `examples/`.
 
 ## License
 

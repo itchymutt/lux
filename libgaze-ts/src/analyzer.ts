@@ -10,7 +10,7 @@
  *
  * Same vocabulary as libgaze (Python). Same architecture. Different AST.
  *
- * Uses oxc-parser for TypeScript parsing (~3.5MB vs ~50MB for ts-morph).
+ * Uses oxc-parser for TypeScript parsing (~2.4MB vs ~50MB for ts-morph).
  */
 
 import { parseSync } from "oxc-parser";

@@ -26,10 +26,17 @@ Thumbs.db
 # Environment
 .env
 
-# Internal notes (strategy, research, personas, deck)
+# Internal docs (language design, strategy, research, drafts)
 notes/
 node_modules/
 decks/
+DECISIONS.md
+DESIGN.md
+GRAMMAR.md
+TUTORIAL.md
+ROADMAP.md
+blog-draft.md
+examples/shortener/FINDINGS.md
 
 # Root-level npm artifacts (for ESLint only, not part of the project)
 /package.json

@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::ast::{Expr, Function, Module};
 
-/// The ten Lux effects. Fixed vocabulary. Not extensible.
+/// The ten Gaze effects. Fixed vocabulary. Not extensible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Effect {
     Net,

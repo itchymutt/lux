@@ -54,4 +54,4 @@ Gate PRs on what the code does to the world.
 | `Rand` | Generates random numbers |
 | `Async` | Spawns concurrent tasks |
 | `Unsafe` | Subprocess, exec, eval, FFI, deserialization |
-| `Fail` | Can fail (sys.exit, process.exit) |
+| `Fail` | Can fail (sys.exit, unhandled exceptions) |

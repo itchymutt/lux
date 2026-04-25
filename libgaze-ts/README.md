@@ -94,7 +94,7 @@ for (const fn of fileResult.functions) {
 | `Rand` | Randomness (Math.random, crypto.randomUUID) |
 | `Async` | Concurrency (worker_threads, child_process) |
 | `Unsafe` | Subprocess, exec, eval, FFI, deserialization |
-| `Fail` | Can fail (sys.exit, process.exit) |
+| `Fail` | Can fail (process.exit, uncaught exceptions) |
 
 ## Benchmark
 

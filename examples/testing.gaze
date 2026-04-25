@@ -1,4 +1,4 @@
-// Testing in Lux.
+// Testing in Gaze.
 // Pure functions are trivially testable. No mocks, no setup.
 // Effectful functions are tested by injecting narrowed capabilities.
 

@@ -1,4 +1,4 @@
-// The simplest Lux program.
+// The simplest Gaze program.
 // `can Console` means this function writes to the terminal.
 
 fn main() can Console {
